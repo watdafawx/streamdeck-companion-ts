@@ -1,3 +1,14 @@
+/**
+ * Animator core
+ *
+ * ## Purpose
+ * High-performance per-frame animator that interpolates colors and batches updates
+ * to the `StreamDeckClient`. Intended for continuous or looped animations.
+ *
+ * ## Notes
+ * - Starts/stops its internal timer automatically when animations exist.
+ * - Coalesces style updates per tick to reduce API calls.
+ */
 import { StreamDeckClient } from './client';
 import type { ButtonPosition, ButtonStyle } from './types';
 

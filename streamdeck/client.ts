@@ -1,8 +1,21 @@
 /**
  * StreamDeck Companion HTTP API Client
- * 
- * A comprehensive client for interacting with StreamDeck Companion's HTTP API
- * Supports all documented endpoints and provides a clean TypeScript interface
+ *
+ * ## Overview
+ * A full-featured TypeScript client for the StreamDeck Companion HTTP API.
+ * Use this class to programmatically control buttons, styles, variables and
+ * to build fluent/chained UI operations for a Stream Deck surface.
+ *
+ * ## Quick example
+ * ```ts
+ * import { StreamDeckClient } from './streamdeck/client';
+ * const client = new StreamDeckClient({ baseUrl: 'http://localhost:8000' });
+ * await client.pressButton(StreamDeckClient.createPosition(0, 0, 0));
+ * ```
+ *
+ * ## Notes
+ * - Hovers in VS Code render the markdown above (headings, code blocks, lists).
+ * - Add more `@example`, `@remarks` and `@see` tags to improve discoverability.
  */
 
 import type {
@@ -130,10 +143,25 @@ export class StreamDeckClient {
   // =============================================================================
 
   /**
-   * Press and release a button (run both down and up actions)
-  *
-  * @example
-  * /api/location/0/0/0/press
+   * Press and release a button (run both down and up actions).
+   *
+   * ## Summary
+   * Presses the specified button position and immediately releases it.
+   *
+   * ## Parameters
+   * @param position - Button coordinates: { page, row, column }.
+   *
+   * ## Example
+   * ```ts
+   * const client = new StreamDeckClient({ baseUrl: 'http://localhost:8000' });
+   * await client.pressButton(StreamDeckClient.createPosition(0, 0, 0));
+   * ```
+   *
+   * ## Notes
+   * - Emits a `button` event with `action: 'press'` after the request succeeds.
+   * - Maps to HTTP endpoint: `/api/location/{page}/{row}/{column}/press`.
+   *
+   * @returns Promise<void>
    */
   async pressButton(position: ButtonPosition): Promise<void> {
     const path = `/api/location/${position.page}/${position.row}/${position.column}/press`;
@@ -836,34 +864,36 @@ export class ButtonChain {
 
   /**
    * Convenience animate helper for this button chain.
-   * Accepts either a preset name (from `BUTTON_PRESETS`) or a full `ButtonStyle`.
-   * The third argument may be either:
-   *  - an options object: { type?: 'flash'|'pulse'|'fade'|'rainbow', intervals?, loop?, revertTo?, fromColor?, toColor? }
-   *  - a boolean `true|false` which simply enables/disables the animation for this call
-   *  - a sync predicate `() => boolean` or async predicate `() => Promise<boolean>` which is evaluated
-   *    before the animation runs; if the animation loops the inline predicate is re-checked and the
-   *    animation will stop when it becomes false.
    *
-   * Examples:
-   *   // flash a preset style for 1s (single run)
-   *   await client.button(pos).animate('SUCCESS', 1000, { type: 'flash', intervals: 3 });
+   * Use this to run short animations (flash, pulse, fade, rainbow) against a
+   * single button. The method accepts either a preset name (resolved at runtime)
+   * or a full `ButtonStyle` object.
    *
-   *   // continuous pulse until stopped (returns a stop function)
-   *   const stop = await client.button(pos).animate({ bgcolor: '#112233' }, 800, { type: 'flash', loop: true });
-   *   // later
-   *   stop?.();
+   * ## Parameters
+   * @param presetOrStyle - Preset key (string) or a `ButtonStyle` object.
+   * @param duration - Duration in milliseconds for the animation (default: 1000).
+   * @param opts - Options object or inline condition. Options may include:
+   *   - `type`: 'flash' | 'pulse' | 'fade' | 'rainbow'
+   *   - `intervals`: number of sub-intervals
+   *   - `loop`: boolean to loop indefinitely (returns a stop function)
+   *   - `revertTo`: preset key or style to revert to
+   *   - `fromColor`, `toColor`: color overrides for fades
+   *   Alternatively `opts` may be a boolean, a sync predicate `() => boolean` or
+   *   an async predicate `() => Promise<boolean>` which is evaluated before running.
    *
-   *   // inline predicate (sync): only animate when round === 9
-   *   await client.button(pos).animate('SUCCESS', 800, () => round === 9);
+   * ## Returns
+   * - When `loop` is true: returns a stop function `() => void` to cancel the loop.
+   * - Otherwise returns `void` when the single-run animation completes.
    *
-   *   // inline predicate (async) with no options:
-   *   await client.button(pos).animate('SUCCESS', 800, async () => await isRoundActive());
+   * ## Examples
+   * ```ts
+   * // single flash run using a preset
+   * await client.button(pos).animate('SUCCESS', 1000, { type: 'flash', intervals: 3 });
    *
-   * Notes:
-   * - If `presetOrStyle` is a string, it will be resolved against `BUTTON_PRESETS` at runtime.
-   * - When `opts.loop` is true the method returns a stop function; otherwise it completes when done.
-   * - If you need both an inline predicate and looping options, you can use `.when()` / `.whenAsync()`
-   *   before calling `.animate()` to keep the predicate and options separate.
+   * // continuous fade loop; get a stop handle
+   * const stop = await client.button(pos).animate({ bgcolor: '#112233' }, 800, { type: 'fade', loop: true });
+   * // later: stop();
+   * ```
    */
   async animate(
     presetOrStyle: keyof any | ButtonStyle,

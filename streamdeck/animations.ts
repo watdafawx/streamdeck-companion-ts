@@ -1,3 +1,18 @@
+/**
+ * Animations helper presets
+ *
+ * ## Overview
+ * Small, focused preset functions that wrap the low-level `Animator` API.
+ * Use these when you want quick effects (pulse, breath, rainbowSweep) without
+ * building an animator yourself.
+ *
+ * ## Example
+ * ```ts
+ * import { Animator } from './animator';
+ * import { pulse } from './animations';
+ * const id = pulse(animator, { page:1,row:0,column:0 }, { bgcolor:'#000' }, { duration:800 });
+ * ```
+ */
 import { Animator } from './animator';
 import type { ButtonPosition, ButtonStyle } from './types';
 import { StreamDeckClient } from './client';

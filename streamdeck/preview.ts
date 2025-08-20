@@ -1,6 +1,14 @@
 import { StreamDeckClient } from './client';
 import type { ButtonPosition, ButtonStyle } from './types';
 
+/** 
+ * Preview bridge utilities 
+ * 
+ * Small, dependency-free preview UI and bridge helpers so you can mount a 
+ * lightweight preview of your StreamDeck page in a browser. Exposes middleware
+ * and handlers for Express/node/fetch-based runtimes plus a `handleWsConnection` 
+ * helper to wire WebSocket updates from the `StreamDeckClient`. 
+ */ 
 export interface PreviewOptions {
   basePath?: string; // where the preview is mounted, default '/preview'
 }

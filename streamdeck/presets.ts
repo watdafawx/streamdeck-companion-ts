@@ -88,8 +88,8 @@ export async function createEsportsScoreboard(
   );
 
   // Status indicator (position 1,2)
-  const statusColor = matchData.status === 'live' ? COLORS.SUCCESS : 
-                     matchData.status === 'paused' ? COLORS.WARNING : COLORS.ERROR;
+  const statusColor = matchData.status === 'live' ? (COLORS.SUCCESS as string) : 
+                     matchData.status === 'paused' ? (COLORS.WARNING as string) : (COLORS.ERROR as string);
   
   await client.updateButtonStyleBody(
     { page, row: 1, column: 2 },
@@ -292,8 +292,8 @@ export async function createSystemMonitor(
   const row = startRow;
   
   // CPU usage
-  const cpuColor = stats.cpu > 80 ? COLORS.ERROR : 
-                   stats.cpu > 60 ? COLORS.WARNING : COLORS.SUCCESS;
+  const cpuColor = stats.cpu > 80 ? (COLORS.ERROR as string) : 
+                   stats.cpu > 60 ? (COLORS.WARNING as string) : (COLORS.SUCCESS as string);
   
   await client.updateButtonStyleBody(
     { page, row, column: 0 },
@@ -306,8 +306,8 @@ export async function createSystemMonitor(
   );
   
   // Memory usage
-  const memColor = stats.memory > 80 ? COLORS.ERROR : 
-                   stats.memory > 60 ? COLORS.WARNING : COLORS.SUCCESS;
+  const memColor = stats.memory > 80 ? (COLORS.ERROR as string) : 
+                   stats.memory > 60 ? (COLORS.WARNING as string) : (COLORS.SUCCESS as string);
   
   await client.updateButtonStyleBody(
     { page, row, column: 1 },
@@ -321,8 +321,8 @@ export async function createSystemMonitor(
   
   // GPU usage (if available)
   if (stats.gpu !== undefined) {
-    const gpuColor = stats.gpu > 80 ? COLORS.ERROR : 
-                     stats.gpu > 60 ? COLORS.WARNING : COLORS.SUCCESS;
+  const gpuColor = stats.gpu > 80 ? (COLORS.ERROR as string) : 
+           stats.gpu > 60 ? (COLORS.WARNING as string) : (COLORS.SUCCESS as string);
     
     await client.updateButtonStyleBody(
       { page, row, column: 2 },
@@ -337,8 +337,8 @@ export async function createSystemMonitor(
   
   // Temperature (if available)
   if (stats.temperature !== undefined) {
-    const tempColor = stats.temperature > 80 ? COLORS.ERROR : 
-                      stats.temperature > 70 ? COLORS.WARNING : COLORS.SUCCESS;
+  const tempColor = stats.temperature > 80 ? (COLORS.ERROR as string) : 
+            stats.temperature > 70 ? (COLORS.WARNING as string) : (COLORS.SUCCESS as string);
     
     await client.updateButtonStyleBody(
       { page, row, column: 3 },
@@ -385,7 +385,7 @@ export async function createCountdownTimer(
   const seconds = remainingSeconds % 60;
   const timeText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
   
-  let bgcolor = COLORS.SUCCESS;
+  let bgcolor: string = COLORS.SUCCESS as string;
   
   if (config.criticalThreshold && remainingSeconds <= config.criticalThreshold) {
     bgcolor = COLORS.ERROR;
@@ -482,7 +482,7 @@ export async function createProgressButton(
   const filledBars = Math.round((progress / 100) * barLength);
   const progressBar = '█'.repeat(filledBars) + '░'.repeat(barLength - filledBars);
   
-  let color = COLORS.SUCCESS;
+  let color: string = COLORS.SUCCESS as string;
   if (progress > 80) color = COLORS.ERROR;
   else if (progress > 60) color = COLORS.WARNING;
   

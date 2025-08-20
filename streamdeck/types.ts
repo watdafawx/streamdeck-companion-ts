@@ -1,9 +1,11 @@
 /**
- * StreamDeck Companion API Types
- * 
- * Type definitions for the StreamDeck Companion HTTP API
- * Compatible with any project using StreamDeck Companion
- */
++ * StreamDeck Companion API Types
++ *
++ * ## Overview
++ * Centralized type definitions and error class used across the library. Keep
++ * these types minimal and purely structural so they can be consumed by both TS
++ * and JS projects (via generated d.ts files).
++ */
 
 // Button position coordinates
 export interface ButtonPosition {

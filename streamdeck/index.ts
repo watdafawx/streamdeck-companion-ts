@@ -1,11 +1,10 @@
 /**
- * StreamDeck Companion Module
- * 
- * A comprehensive TypeScript module for interacting with StreamDeck Companion's HTTP API
- * Designed to work with any project, not just this specific codebase
- * 
- * @author StreamDeck Module
- * @version 1.0.0
+ * Public module entry (re-exports)
+ *
+ * ## Summary
+ * This file re-exports the public API surface of the library so consumers can
+ * import from the package root. Keep this file small and focused — it should
+ * only provide friendly factories and re-exports.
  */
 
 // Core exports
@@ -76,7 +75,6 @@ export function createAnimator(client: StreamDeckClient, fps: number = 15) {
 export const VERSION = '1.0.0';
 export const COMPATIBLE_COMPANION_VERSION = '3.0.0+';
 
-// Module metadata
 export const MODULE_INFO = {
   name: 'StreamDeck Companion HTTP API Client',
   version: VERSION,

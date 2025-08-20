@@ -3,12 +3,16 @@
  * 
  * Helper functions and utilities for working with StreamDeck Companion
  */
+/**
+ * StreamDeck Companion Utilities
+ *
+ * Utility helpers for color, layout and text formatting used by presets and the
+ * client. These small helpers are intentionally dependency-free so they are
+ * easy to include in browser or server preview code.
+ */
 
-import { ButtonPosition, ButtonStyle, StreamDeckClient } from './client';
-
-// =============================================================================
-// BUTTON GRID UTILITIES
-// =============================================================================
+import { StreamDeckClient } from './client';
+import type { ButtonPosition, ButtonStyle } from './types';
 
 /**
  * Generate all button positions for a given page and grid size
@@ -225,10 +229,12 @@ export const BUTTON_PRESETS = {
  * Create a button style with custom overrides
  */
 export function createButtonStyle(
-  preset: keyof typeof BUTTON_PRESETS,
+  preset: keyof typeof BUTTON_PRESETS | string,
   overrides: Partial<ButtonStyle> = {}
 ): ButtonStyle {
-  return { ...BUTTON_PRESETS[preset], ...overrides };
+  // allow using named presets that may come from other modules or strings
+  const base = (BUTTON_PRESETS as any)[preset] ?? {};
+  return { ...base, ...overrides } as ButtonStyle;
 }
 
 // =============================================================================

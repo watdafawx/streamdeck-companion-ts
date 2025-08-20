@@ -545,6 +545,14 @@ export class StreamDeckClient {
     return new ButtonChain(this, position);
   }
 
+  /**
+   * Start a fluent builder for system-wide operations (variables, surfaces, etc.).
+   * Example: await client.system().setVar('status', 'live').rescanSurfaces().apply();
+   */
+  system(): SystemChain {
+    return new SystemChain(this);
+  }
+
 
 
   // =============================================================================
@@ -1653,5 +1661,259 @@ export class ButtonChain {
       data: { type: 'fadeOutIn', params: [targetColor, fadeOutDuration, fadeInDuration, condition] }
     });
     return this;
+  }
+
+  // =============================================================================
+  // VARIABLE OPERATIONS (FLUENT API)
+  // =============================================================================
+
+  /**
+   * Queue setting a custom variable value.
+   * The variable will be set when apply() is called.
+   *
+   * ## Example
+   * ```ts
+   * await client.button(pos)
+   *   .text('Live')
+   *   .bgcolor('#FF0000')
+   *   .setCustomVar('stream_status', 'live')
+   *   .setCustomVar('viewer_count', '1234')
+   *   .apply();
+   * ```
+   */
+  setCustomVar(name: string, value: string): this {
+    this.operations.push({
+      type: 'action',
+      data: () => this.client.setCustomVariable(name, value)
+    });
+    return this;
+  }
+
+  /**
+   * Alias for setCustomVar for shorter syntax
+   */
+  setVar(name: string, value: string): this {
+    return this.setCustomVar(name, value);
+  }
+
+  /**
+   * Queue setting multiple custom variables at once.
+   * All variables will be set when apply() is called.
+   *
+   * ## Example
+   * ```ts
+   * await client.button(pos)
+   *   .text('Status Updated')
+   *   .setCustomVars({
+   *     'stream_status': 'live',
+   *     'viewer_count': '1234',
+   *     'current_scene': 'Main Camera'
+   *   })
+   *   .apply();
+   * ```
+   */
+  setCustomVars(variables: Record<string, string>): this {
+    Object.entries(variables).forEach(([name, value]) => {
+      this.operations.push({
+        type: 'action',
+        data: () => this.client.setCustomVariable(name, value)
+      });
+    });
+    return this;
+  }
+
+  /**
+   * Alias for setCustomVars for shorter syntax
+   */
+  setVars(variables: Record<string, string>): this {
+    return this.setCustomVars(variables);
+  }
+
+  // =============================================================================
+  // SYSTEM OPERATIONS (FLUENT API)
+  // =============================================================================
+
+  /**
+   * Queue a surface rescan operation.
+   * The rescan will be performed when apply() is called.
+   *
+   * ## Example
+   * ```ts
+   * await client.button(pos)
+   *   .text('Rescanning...')
+   *   .bgcolor('#FFA500')
+   *   .rescanSurfaces()
+   *   .apply();
+   * ```
+   */
+  rescanSurfaces(): this {
+    this.operations.push({
+      type: 'action',
+      data: () => this.client.rescanSurfaces()
+    });
+    return this;
+  }
+}
+
+/**
+ * Fluent SystemChain builder for system-wide operations.
+ *
+ * Use this to batch system operations like setting variables and rescanning surfaces.
+ * All operations are executed in sequence when you call `apply()`.
+ *
+ * Example:
+ *   await client.system()
+ *     .setVar('stream_status', 'live')
+ *     .setVar('viewer_count', '1234')
+ *     .rescanSurfaces()
+ *     .apply();
+ */
+export class SystemChain {
+  private client: StreamDeckClient;
+  private operations: Array<() => Promise<any>> = [];
+  private enabled = true;
+  private condition?: () => boolean;
+  private asyncCondition?: () => Promise<boolean>;
+
+  constructor(client: StreamDeckClient) {
+    this.client = client;
+  }
+
+  /**
+   * Set a custom variable value.
+   *
+   * ## Example
+   * ```ts
+   * await client.system()
+   *   .setVar('stream_status', 'live')
+   *   .setVar('viewer_count', '1234')
+   *   .apply();
+   * ```
+   */
+  setVar(name: string, value: string): this {
+    this.operations.push(() => this.client.setCustomVariable(name, value));
+    return this;
+  }
+
+  /**
+   * Set multiple custom variables at once.
+   *
+   * ## Example
+   * ```ts
+   * await client.system()
+   *   .setVars({
+   *     'stream_status': 'live',
+   *     'viewer_count': '1234',
+   *     'current_scene': 'Main Camera'
+   *   })
+   *   .apply();
+   * ```
+   */
+  setVars(variables: Record<string, string>): this {
+    Object.entries(variables).forEach(([name, value]) => {
+      this.operations.push(() => this.client.setCustomVariable(name, value));
+    });
+    return this;
+  }
+
+  /**
+   * Queue a surface rescan operation.
+   *
+   * ## Example
+   * ```ts
+   * await client.system()
+   *   .setVar('status', 'rescanning')
+   *   .rescanSurfaces()
+   *   .apply();
+   * ```
+   */
+  rescanSurfaces(): this {
+    this.operations.push(() => this.client.rescanSurfaces());
+    return this;
+  }
+
+  /**
+   * Only enable the chain if condition is truthy.
+   * Example: client.system().when(shouldUpdate).setVar('status', 'live').apply();
+   */
+  when(condition: boolean | (() => boolean)): this {
+    if (typeof condition === 'function') {
+      this.condition = condition as () => boolean;
+    } else {
+      this.condition = undefined;
+      this.enabled = Boolean(condition);
+    }
+    return this;
+  }
+
+  /**
+   * Inverse of `when` - enable only when condition is falsy.
+   */
+  unless(condition: boolean | (() => boolean)): this {
+    if (typeof condition === 'function') {
+      const fn = condition as () => boolean;
+      this.condition = () => !fn();
+    } else {
+      this.condition = undefined;
+      this.enabled = !Boolean(condition);
+    }
+    return this;
+  }
+
+  /**
+   * Like `when` but accepts an async predicate.
+   */
+  whenAsync(predicate: () => Promise<boolean>): this {
+    this.asyncCondition = predicate;
+    this.condition = undefined;
+    return this;
+  }
+
+  /**
+   * Inverse of `whenAsync`.
+   */
+  unlessAsync(predicate: () => Promise<boolean>): this {
+    this.asyncCondition = async () => !(await predicate());
+    this.condition = undefined;
+    return this;
+  }
+
+  /**
+   * Execute all queued operations in sequence.
+   */
+  async apply(): Promise<void> {
+    // Evaluate condition
+    let finalEnabled = this.enabled;
+    if (this.asyncCondition) {
+      try {
+        finalEnabled = Boolean(await this.asyncCondition());
+      } catch {
+        finalEnabled = false;
+      }
+    } else if (this.condition) {
+      finalEnabled = Boolean(this.condition());
+    }
+
+    if (!finalEnabled) return;
+
+    // Execute operations in sequence
+    for (const operation of this.operations) {
+      try {
+        await operation();
+        // Small delay between operations
+        await new Promise(resolve => setTimeout(resolve, 10));
+      } catch (error) {
+        console.error('System chain operation failed:', error);
+        // Continue with other operations
+      }
+    }
+  }
+
+  /**
+   * Apply and return the client for further chaining.
+   */
+  async applyAndContinue(): Promise<StreamDeckClient> {
+    await this.apply();
+    return this.client;
   }
 }

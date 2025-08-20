@@ -378,9 +378,48 @@ await client
 // POST /api/location/1/0/2/press   (queued action executed after style)
 ```
 
+#### Variables and System Operations in Fluent Chains
+
+The fluent API also supports custom variables and system operations:
+
+```typescript
+// Button styling with variable updates
+await client.button(pos)
+  .text('Going Live')
+  .bgcolor('#FF0000')
+  .setCustomVar('stream_status', 'live')
+  .setCustomVar('viewer_count', '0')
+  .press()
+  .apply();
+
+// System-wide operations
+await client.system()
+  .setVar('stream_status', 'live')
+  .setVars({
+    'obs_connected': 'true',
+    'audio_level': '75',
+    'cpu_usage': '45'
+  })
+  .rescanSurfaces()
+  .apply();
+
+// Complex workflow
+await client.button(pos)
+  .text('Stream Starting...')
+  .bgcolor('#FFA500')
+  .setCustomVars({
+    'stream_status': 'starting',
+    'start_time': new Date().toISOString(),
+    'quality': '1080p60'
+  })
+  .apply();
+```
+
 Notes:
 - The fluent API batches style changes into a single `POST /api/location/<page>/<row>/<col>/style` body request when you call `.apply()`.
 - Actions queued on the chain (like `.press()`, `.down()`, `.up()`) are executed sequentially after the style update.
+- Variable operations (`.setCustomVar()`, `.setVars()`) are executed after styling but before button actions.
+- System operations use `client.system()` for operations not tied to specific buttons.
 - Both the legacy and fluent methods coexist; use whichever fits your needs. The fluent API is recommended when changing multiple fields or running an action immediately after styling.
 
 Try it — minimal example

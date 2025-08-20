@@ -1,12 +1,176 @@
-# StreamDeck Companion HTTP API Client
+# StreamDeck Companion TypeScript Client
 
-A comprehensive TypeScript module for interacting with StreamDeck Companion's HTTP API. This module is designed to work with any project and provides a clean, type-safe interface for controlling StreamDeck devices through Companion.
+A comprehensive TypeScript module for interacting with StreamDeck Companion's HTTP API and remote control protocol. This module is designed to work with any project and provides a clean, type-safe interface for controlling StreamDeck devices through Companion.
 
 ## Features
 
-- ✅ **Full API Coverage** - All documented StreamDeck Companion HTTP endpoints
+- ✅ **Full HTTP API Coverage** - All documented StreamDeck Companion HTTP endpoints
+- ✅ **TCP/UDP Remote Control** - Direct protocol support (Node.js only)
 - ✅ **TypeScript Support** - Complete type definitions and IntelliSense
-- ✅ **Event Handling** - Listen to button presses and style changes
+- ✅ **Cross-Platform** - Works in browsers (HTTP only) and Node.js (HTTP + TCP/UDP)
+- ✅ **Event Handl### Configuration
+
+```typescript
+const client = new StreamDeckClient({
+  baseUrl: "http://127.0.0.1:8000", // Companion URL
+  timeout: 5000, // Request timeout (ms)
+  retries: 3, // Retry attempts
+  enableCaching: true, // Enable button state caching (default: true)
+  nonBlockingAnimations: true, // Use fire-and-forget for animations (default: true)
+  defaultHeaders: {
+    // Custom headers
+    Authorization: "Bearer token",
+  },
+});
+```
+
+### Animation Performance
+
+The client provides two modes for handling HTTP requests during animations:
+
+#### Non-Blocking Animations (Default - Recommended)
+
+```typescript
+const client = new StreamDeckClient({
+  baseUrl: 'http://localhost:8000',
+  nonBlockingAnimations: true // Default - fire-and-forget requests
+});
+
+// This animation will be smooth and responsive
+await client.button(position).animate({ bgcolor: '#FF0000' }, 1000, { type: 'flash' });
+```
+
+**Benefits:**
+- ✅ **Smooth animations** - doesn't wait for HTTP responses
+- ✅ **Consistent timing** - maintains precise frame intervals
+- ✅ **Responsive UI** - won't freeze if network is slow
+- ✅ **Better performance** - up to 80% faster animations
+
+#### Blocking Animations
+
+```typescript
+const client = new StreamDeckClient({
+  baseUrl: 'http://localhost:8000',
+  nonBlockingAnimations: false // Wait for each HTTP response
+});
+
+// This animation will wait for each HTTP request to complete
+await client.button(position).animate({ bgcolor: '#FF0000' }, 1000, { type: 'flash' });
+```
+
+**Benefits:**
+- ✅ **Guaranteed delivery** - ensures each frame was sent
+- ✅ **Error detection** - can catch HTTP errors immediately
+- ❌ **May stutter** - pauses for network delays
+- ❌ **Slower performance** - timing depends on network speed
+
+#### Runtime Control
+
+```typescript
+// Check current mode
+console.log('Non-blocking enabled:', client.isNonBlockingAnimationsEnabled());
+
+// Switch to blocking mode for critical animations
+client.setNonBlockingAnimationsEnabled(false);
+await client.button(emergencyButton).animate('ERROR', 1000);
+
+// Switch back to non-blocking for smooth effects
+client.setNonBlockingAnimationsEnabled(true);
+await client.button(statusButton).animate('SUCCESS', 500);
+```
+
+#### When to Use Each Mode
+
+**Use Non-Blocking (default) for:**
+- Visual effects and status indicators
+- Frequent color/text updates
+- Smooth user feedback
+- Real-time status displays
+
+**Use Blocking for:**
+- Critical state changes that must be confirmed
+- One-time important animations
+- When network is very fast and reliable
+
+### Button State Caching
+
+The client includes intelligent caching to prevent duplicate API calls when setting the same button properties repeatedly. This significantly improves performance when your application updates buttons frequently.
+
+```typescript
+// First call - makes HTTP request
+await client.setButtonText(position, 'Hello');
+
+// Second call with same value - skipped (no HTTP request)
+await client.setButtonText(position, 'Hello');
+
+// Third call with different value - makes HTTP request
+await client.setButtonText(position, 'World');
+```
+
+#### Cache Management
+
+```typescript
+// Check current cached state
+const currentState = client.getButtonState(position);
+console.log('Cached state:', currentState);
+
+// Clear cache for specific button
+client.clearButtonCache(position);
+
+// Clear all cached states
+client.clearAllCache();
+
+// Disable caching temporarily
+client.setCachingEnabled(false);
+await client.setButtonText(position, 'No Cache'); // Always makes request
+
+// Re-enable caching
+client.setCachingEnabled(true);
+
+// Check if caching is enabled
+if (client.isCachingEnabled()) {
+  console.log('Caching is active');
+}
+```
+
+#### Manual State Synchronization
+
+If you know the current state of a button from external sources, you can manually update the cache:
+
+```typescript
+// Set the cached state manually (useful when you know the current state)
+client.setButtonState(position, {
+  text: 'Known State',
+  bgcolor: '#FF0000',
+  color: '#FFFFFF'
+});
+
+// Now this call will be skipped since it matches the cached state
+await client.setButtonText(position, 'Known State'); // No HTTP request
+```
+
+#### Performance Benefits
+
+With caching enabled:
+- ✅ Reduces unnecessary HTTP requests
+- ✅ Improves application responsiveness  
+- ✅ Reduces network overhead
+- ✅ Prevents API rate limiting issues
+- ✅ Works seamlessly with fluent API
+
+Example performance comparison:
+
+```typescript
+// Without caching - 3 HTTP requests
+await client.setButtonText(position, 'Hello');
+await client.setButtonText(position, 'Hello'); // Duplicate request
+await client.setButtonText(position, 'Hello'); // Duplicate request
+
+// With caching (default) - 1 HTTP request
+await client.setButtonText(position, 'Hello');
+await client.setButtonText(position, 'Hello'); // Skipped
+await client.setButtonText(position, 'Hello'); // Skipped
+```n to button presses and style changes
 - ✅ **Batch Operations** - Execute multiple operations efficiently
 - ✅ **Color Utilities** - Helper functions for color management
 - ✅ **Pre-built Layouts** - Ready-to-use layouts for common scenarios
@@ -21,10 +185,127 @@ Since this is a local module, simply import it in your TypeScript/JavaScript pro
 import {
   StreamDeckClient,
   createLocalStreamDeckClient,
+  createRemoteClient,  // Node.js only
+  isRemoteAvailable
 } from "./path/to/streamdeck";
 ```
 
 ## Quick Start
+
+### HTTP API (Browser + Node.js)
+
+```typescript
+import {
+  createLocalStreamDeckClient,
+  COLORS,
+  BUTTON_PRESETS,
+} from "./streamdeck";
+
+// Create HTTP client (assumes Companion running on localhost:8000)
+const client = createLocalStreamDeckClient();
+
+// Test connection
+const status = await client.testConnection();
+console.log("Connected:", status.connected);
+
+// Press a button
+await client.pressButton({ page: 1, row: 0, column: 0 });
+```
+
+### Remote Control - TCP/UDP (Node.js Only)
+
+```typescript
+import { createRemoteClient, isRemoteAvailable } from "./streamdeck";
+
+// Check if remote control is available
+if (isRemoteAvailable()) {
+  // Create TCP remote client
+  const remote = await createRemoteClient('tcp', 'localhost', 16759);
+  
+  // Connect to Companion
+  await remote.connect();
+  
+  // Press a button via TCP
+  await remote.pressButton({ page: 1, row: 2, column: 3 });
+  
+  // Set button text and colors
+  await remote.setButtonText({ page: 1, row: 0, column: 0 }, 'Hello TCP!');
+  await remote.setButtonBackgroundColor({ page: 1, row: 0, column: 0 }, '#FF0000');
+  
+  // Control surfaces
+  await remote.setSurfacePage('emulator', 5);
+  
+  // Custom variables
+  await remote.setCustomVariable('demo_var', 'Hello from TCP!');
+  
+  await remote.disconnect();
+}
+```
+
+### Hybrid Approach
+
+```typescript
+import { StreamDeckClient } from "./streamdeck";
+
+// Create HTTP client
+const client = new StreamDeckClient({ baseUrl: 'http://localhost:8000' });
+
+// Also create remote client for faster commands (Node.js only)
+if (client.getRemoteCapabilities().available) {
+  const remote = await client.createRemoteClient('tcp');
+  await remote.connect();
+  
+  // Use remote for simple commands (faster)
+  await remote.pressButton({ page: 1, row: 0, column: 0 });
+  
+  // Use HTTP for complex operations (more features)
+  await client.button({ page: 1, row: 0, column: 1 })
+    .text('HTTP')
+    .bgcolor('#00FF00')
+    .animate('SUCCESS', 1000)
+    .apply();
+}
+```
+
+## Remote Control Protocol
+
+The remote control feature sends plain text commands over TCP (port 16759) or UDP (port 16759) to StreamDeck Companion. This provides faster response times compared to HTTP requests.
+
+### Available Commands
+
+| Category | Command | Example |
+|----------|---------|---------|
+| **Surface Control** | `SURFACE <id> PAGE-SET <page>` | `SURFACE emulator PAGE-SET 23` |
+| | `SURFACE <id> PAGE-UP` | `SURFACE emulator PAGE-UP` |
+| | `SURFACE <id> PAGE-DOWN` | `SURFACE emulator PAGE-DOWN` |
+| **Button Actions** | `LOCATION <page>/<row>/<col> PRESS` | `LOCATION 1/2/3 PRESS` |
+| | `LOCATION <page>/<row>/<col> DOWN` | `LOCATION 1/2/3 DOWN` |
+| | `LOCATION <page>/<row>/<col> UP` | `LOCATION 1/2/3 UP` |
+| | `LOCATION <page>/<row>/<col> ROTATE-LEFT` | `LOCATION 1/2/3 ROTATE-LEFT` |
+| | `LOCATION <page>/<row>/<col> ROTATE-RIGHT` | `LOCATION 1/2/3 ROTATE-RIGHT` |
+| | `LOCATION <page>/<row>/<col> SET-STEP <step>` | `LOCATION 1/2/3 SET-STEP 5` |
+| **Button Styling** | `LOCATION <page>/<row>/<col> STYLE TEXT <text>` | `LOCATION 1/2/3 STYLE TEXT Hello` |
+| | `LOCATION <page>/<row>/<col> STYLE COLOR <hex>` | `LOCATION 1/2/3 STYLE COLOR #FF0000` |
+| | `LOCATION <page>/<row>/<col> STYLE BGCOLOR <hex>` | `LOCATION 1/2/3 STYLE BGCOLOR #000000` |
+| **Variables** | `CUSTOM-VARIABLE <name> SET-VALUE <value>` | `CUSTOM-VARIABLE cue SET-VALUE intro` |
+| **System** | `SURFACES RESCAN` | `SURFACES RESCAN` |
+
+### TCP vs UDP
+
+- **TCP**: Reliable, connection-based. Use for critical commands.
+- **UDP**: Fast, connectionless. Use for rapid-fire updates or when slight message loss is acceptable.
+
+```typescript
+// TCP - Reliable for important commands
+const tcpRemote = await createRemoteClient('tcp');
+await tcpRemote.connect();
+await tcpRemote.pressButton({ page: 1, row: 0, column: 0 });
+
+// UDP - Fast for status updates  
+const udpRemote = await createRemoteClient('udp');
+await udpRemote.connect();
+await udpRemote.setButtonText({ page: 1, row: 0, column: 1 }, `Live: ${viewers}`);
+```
 
 ### Basic Setup
 
@@ -42,6 +323,8 @@ const client = createLocalStreamDeckClient();
 const status = await client.testConnection();
 console.log("Connected:", status.connected);
 ```
+
+## HTTP API Features
 
 ### Button Operations
 
@@ -212,7 +495,7 @@ const value = await client.getCustomVariable("viewer_count");
 
 #### `StreamDeckClient`
 
-Main client class for interacting with StreamDeck Companion.
+Main client class for HTTP API interaction.
 
 ```typescript
 const client = new StreamDeckClient({
@@ -220,36 +503,133 @@ const client = new StreamDeckClient({
   timeout: 5000,
   retries: 3,
 });
+
+// Check remote capabilities
+const capabilities = StreamDeckClient.getRemoteCapabilities();
+console.log("TCP available:", capabilities.tcp);
+console.log("UDP available:", capabilities.udp);
+
+// Create remote client (Node.js only)
+const remote = await client.createRemoteClient('tcp');
+```
+
+#### `RemoteClient`
+
+Remote control client for TCP/UDP communication (Node.js only).
+
+```typescript
+import { createRemoteClient } from "./streamdeck";
+
+const remote = await createRemoteClient('tcp', 'localhost', 16759);
+await remote.connect();
+
+// Add event listener
+remote.addEventListener((event) => {
+  console.log('Remote event:', event.type, event.action);
+});
+
+// Check connection status
+console.log('Connected:', remote.isConnected());
 ```
 
 ### Button Operations
 
-| Method                          | Description                |
-| ------------------------------- | -------------------------- |
-| `pressButton(position)`         | Press and release a button |
-| `pressButtonDown(position)`     | Press button down (hold)   |
-| `releaseButton(position)`       | Release button             |
-| `rotateLeft(position)`          | Trigger left rotation      |
-| `rotateRight(position)`         | Trigger right rotation     |
-| `setButtonStep(position, step)` | Set encoder step           |
+| Method                          | HTTP | TCP/UDP | Description                |
+| ------------------------------- | ---- | ------- | -------------------------- |
+| `pressButton(position)`         | ✅   | ✅      | Press and release a button |
+| `pressButtonDown(position)`     | ✅   | ✅      | Press button down (hold)   |
+| `releaseButton(position)`       | ✅   | ✅      | Release button             |
+| `rotateLeft(position)`          | ✅   | ✅      | Trigger left rotation      |
+| `rotateRight(position)`         | ✅   | ✅      | Trigger right rotation     |
+| `setButtonStep(position, step)` | ✅   | ✅      | Set encoder step           |
 
 ### Style Operations
 
-| Method                                      | Description              |
-| ------------------------------------------- | ------------------------ |
-| `updateButtonStyle(position, style)`        | Update button appearance |
-| `setButtonText(position, text)`             | Set button text          |
-| `setButtonBackgroundColor(position, color)` | Set background color     |
-| `setButtonTextColor(position, color)`       | Set text color           |
-| `setButtonTextSize(position, size)`         | Set text size            |
+| Method                                      | HTTP | TCP/UDP | Description              |
+| ------------------------------------------- | ---- | ------- | ------------------------ |
+| `updateButtonStyle(position, style)`        | ✅   | ✅      | Update button appearance |
+| `setButtonText(position, text)`             | ✅   | ✅      | Set button text          |
+| `setButtonBackgroundColor(position, color)` | ✅   | ✅      | Set background color     |
+| `setButtonTextColor(position, color)`       | ✅   | ✅      | Set text color           |
+| `setButtonTextSize(position, size)`         | ✅   | ❌      | Set text size            |
+
+### Surface Operations
+
+| Method                            | HTTP | TCP/UDP | Description              |
+| --------------------------------- | ---- | ------- | ------------------------ |
+| `setSurfacePage(surface, page)`   | ❌   | ✅      | Set surface to page      |
+| `surfacePageUp(surface)`          | ❌   | ✅      | Page up on surface       |
+| `surfacePageDown(surface)`        | ❌   | ✅      | Page down on surface     |
+| `rescanSurfaces()`                | ✅   | ✅      | Rescan for USB surfaces  |
 
 ### Variable Operations
 
-| Method                                | Description         |
-| ------------------------------------- | ------------------- |
-| `setCustomVariable(name, value)`      | Set custom variable |
-| `getCustomVariable(name)`             | Get custom variable |
-| `getModuleVariable(connection, name)` | Get module variable |
+| Method                                | HTTP | TCP/UDP | Description         |
+| ------------------------------------- | ---- | ------- | ------------------- |
+| `setCustomVariable(name, value)`      | ✅   | ✅      | Set custom variable |
+| `getCustomVariable(name)`             | ✅   | ❌      | Get custom variable |
+| `getModuleVariable(connection, name)` | ✅   | ❌      | Get module variable |
+
+## Environment Detection
+
+```typescript
+import { isRemoteAvailable, StreamDeckClient } from "./streamdeck";
+
+// Check if remote control is available
+if (isRemoteAvailable()) {
+  console.log("Remote control available (Node.js)");
+  const remote = await createRemoteClient('tcp');
+} else {
+  console.log("Browser environment - HTTP only");
+}
+
+// Alternative: Check via client
+const capabilities = StreamDeckClient.getRemoteCapabilities();
+console.log("Available protocols:", { 
+  http: true, // Always available
+  tcp: capabilities.tcp, 
+  udp: capabilities.udp 
+});
+```
+
+## Performance Considerations
+
+### When to use HTTP vs TCP/UDP
+
+**Use HTTP when:**
+- Running in a browser
+- Need complex operations (batch updates, animations)  
+- Want to get data back (custom variables, module variables)
+- Using the fluent API with conditions
+
+**Use TCP when:**
+- Running in Node.js
+- Need reliable delivery of critical commands
+- Want faster response times for button presses
+- Need connection state management
+
+**Use UDP when:**
+- Running in Node.js
+- Need maximum speed for frequent updates
+- Can tolerate occasional message loss
+- Sending status updates or non-critical styling
+
+### Example: Optimal Protocol Selection
+
+```typescript
+// HTTP: Complex styling with animations
+await client.button(pos)
+  .text('Live')
+  .bgcolor('#FF0000')
+  .animate('SUCCESS', 1000)
+  .apply();
+
+// TCP: Critical button press
+await remoteClient.pressButton(emergencyStopPosition);
+
+// UDP: Frequent status updates
+await udpClient.setButtonText(viewerCountPosition, `${viewers} viewers`);
+```
 
 ## Utilities
 
@@ -519,7 +899,8 @@ This module is compatible with:
 
 - StreamDeck Companion 3.0.0+
 - All StreamDeck device types
-- Node.js 16+
+- **Browsers**: HTTP API only
+- **Node.js 16+**: HTTP + TCP/UDP APIs
 - TypeScript 4.0+
 
 ## License

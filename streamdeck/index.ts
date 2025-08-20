@@ -19,6 +19,9 @@ export * from './types';
 export * from './utils';
 export * from './presets';
 
+// Direct protocol exports (Node.js only)
+export type { RemoteCapabilities } from './client';
+
 // Re-export commonly used items for convenience
 export {
   type ButtonPosition,
@@ -71,6 +74,63 @@ export function createAnimator(client: StreamDeckClient, fps: number = 15) {
   return new Animator(client, fps);
 }
 
+/**
+ * Create a direct protocol client for TCP/UDP control (Node.js only)
+ * 
+ * This creates a client that connects directly to Companion's TCP/UDP protocol
+ * for faster response times compared to HTTP. Works locally or over network.
+ * 
+ * @param protocol - Either 'tcp' or 'udp'
+ * @param host - Host to connect to (default: 'localhost')  
+ * @param port - Port to connect to (default: 16759)
+ * 
+ * @example
+ * ```ts
+ * // TCP example (local)
+ * const direct = await createDirectClient('tcp');
+ * await direct.connect();
+ * await direct.pressButton({ page: 1, row: 2, column: 3 });
+ * 
+ * // UDP example (over network)
+ * const direct = await createDirectClient('udp', '192.168.1.100');
+ * await direct.connect();
+ * await direct.setSurfacePage('emulator', 5);
+ * ```
+ */
+export async function createDirectClient(
+  protocol: 'tcp' | 'udp' = 'tcp',
+  host: string = 'localhost',
+  port: number = 16759
+): Promise<any> {
+  // Check if direct protocol is available
+  const capabilities = StreamDeckClient.getRemoteCapabilities();
+  if (!capabilities.available) {
+    throw new Error('Direct protocol (TCP/UDP) is only available in Node.js environments');
+  }
+  
+  try {
+    const remoteModule = await import('./remote');
+    return new remoteModule.RemoteClient({
+      protocol,
+      host,
+      port
+    });
+  } catch (error) {
+    throw new Error(`Failed to create direct client: ${(error as Error).message}`);
+  }
+}
+
+/**
+ * Check if direct protocol capabilities are available in the current environment
+ */
+export function isDirectAvailable(): boolean {
+  return StreamDeckClient.getRemoteCapabilities().available;
+}
+
+// Backward compatibility aliases
+export const createRemoteClient = createDirectClient;
+export const isRemoteAvailable = isDirectAvailable;
+
 // Version information
 export const VERSION = '1.0.0';
 export const COMPATIBLE_COMPANION_VERSION = '3.0.0+';
@@ -78,12 +138,13 @@ export const COMPATIBLE_COMPANION_VERSION = '3.0.0+';
 export const MODULE_INFO = {
   name: 'StreamDeck Companion HTTP API Client',
   version: VERSION,
-  description: 'A comprehensive TypeScript client for StreamDeck Companion HTTP API',
+  description: 'A comprehensive TypeScript client for StreamDeck Companion HTTP API with optional TCP/UDP support',
   author: 'StreamDeck Module',
   license: 'MIT',
   compatibleWith: COMPATIBLE_COMPANION_VERSION,
   features: [
     'Full HTTP API coverage',
+    'TCP/UDP remote control (Node.js)',
     'TypeScript support',
     'Event handling',
     'Batch operations',

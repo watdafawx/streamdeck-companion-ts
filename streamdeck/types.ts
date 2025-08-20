@@ -50,6 +50,8 @@ export interface StreamDeckConfig {
   timeout?: number;
   retries?: number;
   defaultHeaders?: Record<string, string>;
+  enableCaching?: boolean; // Enable/disable button state caching to prevent duplicate requests
+  nonBlockingAnimations?: boolean; // Use fire-and-forget requests for animations (default: true)
 }
 
 // Event types for StreamDeck operations

@@ -32,17 +32,31 @@ import type {
 } from './types';
 import { StreamDeckError } from './types';
 
+// Remote capabilities type
+export interface RemoteCapabilities {
+  tcp?: boolean;
+  udp?: boolean;
+  available: boolean;
+}
+
 export class StreamDeckClient {
   private baseUrl: string;
   private timeout: number;
   private retries: number;
   private defaultHeaders: Record<string, string>;
   private eventListeners: Set<(event: StreamDeckEvent) => void> = new Set();
+  private _remoteClient?: any;
+  private _animator?: any;
+  private buttonStateCache: Map<string, ButtonStyle> = new Map();
+  private cachingEnabled: boolean = true;
+  private nonBlockingAnimations: boolean = true;
 
   constructor(config: StreamDeckConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, ''); // Remove trailing slash
     this.timeout = config.timeout || 5000;
     this.retries = config.retries || 3;
+    this.cachingEnabled = config.enableCaching !== false; // Default to true
+    this.nonBlockingAnimations = config.nonBlockingAnimations !== false; // Default to true
     this.defaultHeaders = {
       'Content-Type': 'application/json',
       'User-Agent': 'StreamDeck-Client/1.0',
@@ -123,6 +137,120 @@ export class StreamDeckClient {
       undefined,
       lastError
     );
+  }
+
+  /**
+   * Generate a unique key for a button position for caching
+   */
+  private getButtonKey(position: ButtonPosition): string {
+    return `${position.page}:${position.row}:${position.column}`;
+  }
+
+  /**
+   * Get cached button state, or return empty state if not cached
+   */
+  private getCachedButtonState(position: ButtonPosition): ButtonStyle {
+    const key = this.getButtonKey(position);
+    return this.buttonStateCache.get(key) || {};
+  }
+
+  /**
+   * Update cached button state with new style properties
+   */
+  private updateCachedButtonState(position: ButtonPosition, style: Partial<ButtonStyle>): void {
+    // Only update cache if caching is enabled
+    if (!this.cachingEnabled) {
+      return;
+    }
+
+    const key = this.getButtonKey(position);
+    const currentState = this.getCachedButtonState(position);
+    const newState = { ...currentState, ...style };
+    this.buttonStateCache.set(key, newState);
+  }
+
+  /**
+   * Check if the proposed style changes would actually change the button state
+   */
+  private hasStyleChanges(position: ButtonPosition, style: Partial<ButtonStyle>): boolean {
+    // If caching is disabled, always consider there are changes
+    if (!this.cachingEnabled) {
+      return true;
+    }
+
+    const currentState = this.getCachedButtonState(position);
+    
+    for (const [key, value] of Object.entries(style)) {
+      if (currentState[key as keyof ButtonStyle] !== value) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Clear cached state for a specific button (useful for manual cache invalidation)
+   */
+  clearButtonCache(position: ButtonPosition): void {
+    const key = this.getButtonKey(position);
+    this.buttonStateCache.delete(key);
+  }
+
+  /**
+   * Clear all cached button states
+   */
+  clearAllCache(): void {
+    this.buttonStateCache.clear();
+  }
+
+  /**
+   * Enable or disable button state caching
+   */
+  setCachingEnabled(enabled: boolean): void {
+    this.cachingEnabled = enabled;
+    if (!enabled) {
+      this.clearAllCache(); // Clear cache when disabling
+    }
+  }
+
+  /**
+   * Check if caching is currently enabled
+   */
+  isCachingEnabled(): boolean {
+    return this.cachingEnabled;
+  }
+
+  /**
+   * Check if non-blocking animations are enabled
+   */
+  isNonBlockingAnimationsEnabled(): boolean {
+    return this.nonBlockingAnimations;
+  }
+
+  /**
+   * Enable or disable non-blocking animations
+   */
+  setNonBlockingAnimationsEnabled(enabled: boolean): void {
+    this.nonBlockingAnimations = enabled;
+  }
+
+  /**
+   * Get the current cached state for a button (for debugging/inspection)
+   */
+  getButtonState(position: ButtonPosition): ButtonStyle {
+    return { ...this.getCachedButtonState(position) };
+  }
+
+  /**
+   * Manually set the cached state for a button (use with caution)
+   * This can be useful when you know the current state of a button from external sources
+   */
+  setButtonState(position: ButtonPosition, state: ButtonStyle): void {
+    if (this.cachingEnabled) {
+      const key = this.getButtonKey(position);
+      this.buttonStateCache.set(key, { ...state });
+    }
   }
 
   /**
@@ -278,6 +406,11 @@ export class StreamDeckClient {
   * /api/location/0/0/0/style?text=Hello&bgcolor=%23112233
    */
   async updateButtonStyle(position: ButtonPosition, style: ButtonStyle): Promise<void> {
+    // Check if this update would actually change anything
+    if (!this.hasStyleChanges(position, style)) {
+      return; // Skip the request - no changes needed
+    }
+
     const path = `/api/location/${position.page}/${position.row}/${position.column}/style`;
     const queryParams: Record<string, string> = {};
     
@@ -287,6 +420,9 @@ export class StreamDeckClient {
     if (style.size !== undefined) queryParams.size = style.size.toString();
     
     await this.makeRequest('POST', path, undefined, queryParams);
+    
+    // Update cache with successful changes
+    this.updateCachedButtonState(position, style);
     
     this.emitEvent({
       type: 'style',
@@ -313,8 +449,16 @@ export class StreamDeckClient {
   *   await client.button(pos).text('Hi').bgcolor('#000000').color('#FFFFFF').size(18).apply();
    */
   async updateButtonStyleBody(position: ButtonPosition, style: ButtonStyle): Promise<void> {
+    // Check if this update would actually change anything
+    if (!this.hasStyleChanges(position, style)) {
+      return; // Skip the request - no changes needed
+    }
+
     const path = `/api/location/${position.page}/${position.row}/${position.column}/style`;
     await this.makeRequest('POST', path, style);
+    
+    // Update cache with successful changes
+    this.updateCachedButtonState(position, style);
     
     this.emitEvent({
       type: 'style',
@@ -613,13 +757,99 @@ export class StreamDeckClient {
    * Lazy-create and return an Animator tied to this client.
    * Uses dynamic import to avoid circular module load issues.
    */
-  private _animator?: any;
   async getAnimator(fps: number = 15): Promise<any> {
     if (this._animator) return this._animator;
     const mod = await import('./animator');
     this._animator = new mod.Animator(this, fps);
     return this._animator;
   }
+
+  /**
+   * Get remote control capabilities for this environment
+   */
+  static getRemoteCapabilities(): RemoteCapabilities {
+    try {
+      // Check if we're in Node.js environment
+      const isNode = typeof window === 'undefined' && typeof process !== 'undefined' && Boolean(process?.versions?.node);
+      
+      return {
+        tcp: isNode,
+        udp: isNode,
+        available: isNode
+      };
+    } catch {
+      return {
+        tcp: false,
+        udp: false,
+        available: false
+      };
+    }
+  }
+
+  /**
+   * Create a direct protocol client for TCP/UDP control (Node.js only)
+   * 
+   * @param protocol - Either 'tcp' or 'udp'
+   * @param host - Host to connect to (default: 'localhost')
+   * @param port - Port to connect to (default: 16759)
+   * 
+   * @example
+   * ```ts
+   * const client = new StreamDeckClient({ baseUrl: 'http://localhost:8000' });
+   * const direct = await client.createDirectClient('tcp');
+   * await direct.connect();
+   * await direct.pressButton({ page: 1, row: 2, column: 3 });
+   * ```
+   */
+  async createDirectClient(
+    protocol: 'tcp' | 'udp' = 'tcp',
+    host: string = 'localhost',
+    port: number = 16759
+  ): Promise<any> {
+    const capabilities = StreamDeckClient.getRemoteCapabilities();
+    
+    if (!capabilities.available) {
+      throw new StreamDeckError(
+        'Direct protocol (TCP/UDP) is only available in Node.js environments',
+        'DIRECT_NOT_AVAILABLE'
+      );
+    }
+
+    if (this._remoteClient) {
+      return this._remoteClient;
+    }
+
+    try {
+      const remoteModule = await import('./remote');
+      this._remoteClient = new remoteModule.RemoteClient({
+        protocol,
+        host,
+        port,
+        timeout: this.timeout,
+        reconnectAttempts: this.retries
+      });
+
+      return this._remoteClient;
+    } catch (error) {
+      throw new StreamDeckError(
+        'Failed to create direct client',
+        'DIRECT_CLIENT_FAILED',
+        undefined,
+        error
+      );
+    }
+  }
+
+  /**
+   * Get the current direct client instance (if any)
+   */
+  getDirectClient(): any | null {
+    return this._remoteClient || null;
+  }
+
+  // Backward compatibility aliases
+  createRemoteClient = this.createDirectClient;
+  getRemoteClient = this.getDirectClient;
 }
 
 /**
@@ -647,7 +877,7 @@ export class ButtonChain {
   private client: StreamDeckClient;
   private position: ButtonPosition;
   private styleChanges: Partial<ButtonStyle> = {};
-  private actions: Array<() => Promise<void>> = [];
+  private operations: Array<{ type: 'action' | 'fade'; data: any }> = [];
   private enabled = true;
   private condition?: () => boolean;
   private asyncCondition?: () => Promise<boolean>;
@@ -718,7 +948,7 @@ export class ButtonChain {
    * @example
    * /api/location/0/0/0/press
    */
-  this.actions.push(() => this.client.pressButton(this.position));
+  this.operations.push({ type: 'action', data: () => this.client.pressButton(this.position) });
     return this;
   }
 
@@ -728,7 +958,7 @@ export class ButtonChain {
    * @example
    * /api/location/0/0/0/down
    */
-  this.actions.push(() => this.client.pressButtonDown(this.position));
+  this.operations.push({ type: 'action', data: () => this.client.pressButtonDown(this.position) });
     return this;
   }
 
@@ -738,7 +968,7 @@ export class ButtonChain {
    * @example
    * /api/location/0/0/0/up
    */
-  this.actions.push(() => this.client.releaseButton(this.position));
+  this.operations.push({ type: 'action', data: () => this.client.releaseButton(this.position) });
     return this;
   }
 
@@ -748,7 +978,7 @@ export class ButtonChain {
    * @example
    * /api/location/0/0/0/rotate-left
    */
-  this.actions.push(() => this.client.rotateLeft(this.position));
+  this.operations.push({ type: 'action', data: () => this.client.rotateLeft(this.position) });
     return this;
   }
 
@@ -758,7 +988,7 @@ export class ButtonChain {
    * @example
    * /api/location/0/0/0/rotate-right
    */
-  this.actions.push(() => this.client.rotateRight(this.position));
+  this.operations.push({ type: 'action', data: () => this.client.rotateRight(this.position) });
     return this;
   }
 
@@ -769,13 +999,13 @@ export class ButtonChain {
    * /api/location/0/0/0/step?step=5
    */
   if (typeof n !== 'number' || !Number.isFinite(n) || !Number.isInteger(n)) throw new TypeError('step must be an integer');
-  this.actions.push(() => this.client.setButtonStep(this.position, n));
+  this.operations.push({ type: 'action', data: () => this.client.setButtonStep(this.position, n) });
   return this;
   }
 
   /**
-   * Apply collected style changes and then execute queued actions in sequence.
-   * If no style changes were made, only actions run.
+   * Apply collected style changes and then execute queued actions and fade operations in sequence.
+   * If no style changes were made, only actions and fades run.
    */
   async apply(): Promise<void> {
     // Evaluate condition (if supplied) lazily at apply time. This allows
@@ -793,15 +1023,162 @@ export class ButtonChain {
     }
 
     if (!finalEnabled) return;
+    
+    // Apply initial style changes first
     if (Object.keys(this.styleChanges).length > 0) {
       // Use body-style update for combined fields
       await this.client.updateButtonStyleBody(this.position, this.styleChanges as ButtonStyle);
     }
 
-    for (const action of this.actions) {
-      await action();
+    // Execute operations in the order they were added
+    for (const operation of this.operations) {
+      if (operation.type === 'action') {
+        await operation.data();
+      } else if (operation.type === 'fade') {
+        await this.executeFadeOperation(operation.data);
+      }
       // small delay to avoid overwhelming the API
       await new Promise(resolve => setTimeout(resolve, 10));
+    }
+  }
+
+  /**
+   * Execute a queued fade operation
+   */
+  private async executeFadeOperation(fade: { type: string; params: any[] }): Promise<void> {
+    switch (fade.type) {
+      case 'fadeTo':
+        await this.executeActualFadeTo(fade.params[0], fade.params[1], fade.params[2]);
+        break;
+      case 'fadeToBlack':
+        await this.executeActualFadeTo('#000000', fade.params[0], fade.params[1]);
+        break;
+      case 'fadeSequence':
+        await this.executeActualFadeSequence(fade.params[0], fade.params[1]);
+        break;
+      case 'fadeOutIn':
+        await this.executeActualFadeTo('#000000', fade.params[1], fade.params[3]); // fade out
+        await this.executeActualFadeTo(fade.params[0], fade.params[2], fade.params[3]); // fade in
+        break;
+    }
+  }
+
+  /**
+   * Internal method to actually execute a fade to operation
+   */
+  private async executeActualFadeTo(
+    targetColor: string,
+    duration: number = 1000,
+    condition?: boolean | (() => boolean) | (() => Promise<boolean>)
+  ): Promise<void> {
+    // Evaluate condition
+    let shouldRun = true;
+    
+    if (condition !== undefined) {
+      if (typeof condition === 'boolean') {
+        shouldRun = condition;
+      } else if (typeof condition === 'function') {
+        try {
+          const result = condition();
+          shouldRun = result instanceof Promise ? await result : result;
+        } catch {
+          shouldRun = false;
+        }
+      }
+    }
+
+    if (!shouldRun) return;
+
+    // Get the current background color from styleChanges, defaulting to black if not set
+    const currentColor = this.styleChanges.bgcolor || '#000000';
+    
+    // Parse colors to RGB
+    const currentRgb = StreamDeckClient.hexToRgb(currentColor);
+    const targetRgb = StreamDeckClient.hexToRgb(targetColor);
+    
+    if (!currentRgb || !targetRgb) {
+      throw new Error(`Invalid color format. Current: ${currentColor}, Target: ${targetColor}`);
+    }
+
+    // Animation settings - reduced FPS to avoid overwhelming the API
+    const fps = 15; // 15 FPS for smoother animation with fewer HTTP requests
+    const frameCount = Math.max(1, Math.round((duration / 1000) * fps));
+    const frameDelay = duration / frameCount;
+    
+    // Track last sent color to avoid duplicate requests
+    let lastSentColor: string | undefined;
+
+    // Interpolate colors over time
+    for (let frame = 0; frame <= frameCount; frame++) {
+      // Re-check condition each frame for responsive cancellation
+      if (condition && typeof condition === 'function') {
+        try {
+          const result = condition();
+          const currentShouldRun = result instanceof Promise ? await result : result;
+          if (!currentShouldRun) break;
+        } catch {
+          break;
+        }
+      }
+
+      const progress = frame / frameCount; // 0 to 1
+      
+      // Linear interpolation between current and target colors
+      const r = Math.round(currentRgb.r + (targetRgb.r - currentRgb.r) * progress);
+      const g = Math.round(currentRgb.g + (targetRgb.g - currentRgb.g) * progress);
+      const b = Math.round(currentRgb.b + (targetRgb.b - currentRgb.b) * progress);
+      
+      const interpolatedColor = StreamDeckClient.rgbToHex(r, g, b);
+      
+      // Only send request if color actually changed (avoid duplicate requests)
+      if (!lastSentColor || lastSentColor !== interpolatedColor) {
+        try {
+          // Apply the interpolated color while preserving other properties
+          const frameStyle = { ...this.styleChanges, bgcolor: interpolatedColor };
+          
+          if (this.client.isNonBlockingAnimationsEnabled()) {
+            // Fire-and-forget HTTP request to avoid blocking animation timing
+            this.client.updateButtonStyleBody(this.position, frameStyle).catch(error => {
+              // Don't stop animation on network errors, just log and continue
+              console.warn('Fade animation network error:', error);
+            });
+          } else {
+            // Wait for HTTP response (more reliable but may cause stuttering)
+            await this.client.updateButtonStyleBody(this.position, frameStyle);
+          }
+          
+          lastSentColor = interpolatedColor;
+          
+          // Update our internal state to track the current color
+          this.styleChanges.bgcolor = interpolatedColor;
+        } catch (error) {
+          // Don't stop animation on network errors, just log and continue
+          console.warn('Fade animation network error:', error);
+        }
+      }
+      
+      // Wait for next frame (except on last frame)
+      if (frame < frameCount) {
+        await new Promise(resolve => setTimeout(resolve, frameDelay));
+      }
+    }
+  }
+
+  /**
+   * Internal method to actually execute a fade sequence
+   */
+  private async executeActualFadeSequence(
+    sequence: Array<{ color: string; duration: number }>,
+    condition?: boolean | (() => boolean) | (() => Promise<boolean>)
+  ): Promise<void> {
+    for (let i = 0; i < sequence.length; i++) {
+      const step = sequence[i];
+      await this.executeActualFadeTo(step.color, step.duration, condition);
+      
+      // Small pause between sequence steps for smoother transitions
+      if (i < sequence.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
     }
   }
 
@@ -869,6 +1246,10 @@ export class ButtonChain {
    * single button. The method accepts either a preset name (resolved at runtime)
    * or a full `ButtonStyle` object.
    *
+   * IMPORTANT: This method preserves existing button properties by merging the
+   * animation style with the current button state. Only the specified properties
+   * will be animated, leaving others (like text) unchanged.
+   *
    * ## Parameters
    * @param presetOrStyle - Preset key (string) or a `ButtonStyle` object.
    * @param duration - Duration in milliseconds for the animation (default: 1000).
@@ -878,6 +1259,7 @@ export class ButtonChain {
    *   - `loop`: boolean to loop indefinitely (returns a stop function)
    *   - `revertTo`: preset key or style to revert to
    *   - `fromColor`, `toColor`: color overrides for fades
+   *   - `preserveExisting`: boolean (default: true) to merge with current button state
    *   Alternatively `opts` may be a boolean, a sync predicate `() => boolean` or
    *   an async predicate `() => Promise<boolean>` which is evaluated before running.
    *
@@ -887,8 +1269,8 @@ export class ButtonChain {
    *
    * ## Examples
    * ```ts
-   * // single flash run using a preset
-   * await client.button(pos).animate('SUCCESS', 1000, { type: 'flash', intervals: 3 });
+   * // animate only background color, preserving text and other properties
+   * await client.button(pos).animate({ bgcolor: '#FF0000' }, 1000, { type: 'flash', intervals: 3 });
    *
    * // continuous fade loop; get a stop handle
    * const stop = await client.button(pos).animate({ bgcolor: '#112233' }, 800, { type: 'fade', loop: true });
@@ -898,13 +1280,13 @@ export class ButtonChain {
   async animate(
     presetOrStyle: keyof any | ButtonStyle,
     duration: number = 1000,
-    opts: boolean | (() => boolean) | (() => Promise<boolean>) | { type?: 'flash' | 'pulse' | 'fade' | 'rainbow'; intervals?: number; loop?: boolean; revertTo?: keyof any | ButtonStyle; fromColor?: string; toColor?: string } = {}
+    opts: boolean | (() => boolean) | (() => Promise<boolean>) | { type?: 'flash' | 'pulse' | 'fade' | 'rainbow'; intervals?: number; loop?: boolean; revertTo?: keyof any | ButtonStyle; fromColor?: string; toColor?: string; preserveExisting?: boolean } = {}
   ): Promise<(() => void) | void> {
     // Normalize inline predicate vs options. Allow calling .animate(..., true) or
     // .animate(..., () => condition) or .animate(..., async () => await check())
     let inlineSyncCondition: (() => boolean) | undefined;
     let inlineAsyncCondition: (() => Promise<boolean>) | undefined;
-    let options: { type?: 'flash' | 'pulse' | 'fade' | 'rainbow'; intervals?: number; loop?: boolean; revertTo?: keyof any | ButtonStyle; fromColor?: string; toColor?: string } = {};
+    let options: { type?: 'flash' | 'pulse' | 'fade' | 'rainbow'; intervals?: number; loop?: boolean; revertTo?: keyof any | ButtonStyle; fromColor?: string; toColor?: string; preserveExisting?: boolean } = {};
 
     if (typeof opts === 'boolean') {
       inlineSyncCondition = () => opts;
@@ -940,6 +1322,7 @@ export class ButtonChain {
     }
 
     if (!finalEnabled) return undefined;
+    
     // Resolve presets dynamically to avoid circular import issues at module load
     const utils = await import('./utils');
     const BUTTON_PRESETS = (utils as any).BUTTON_PRESETS as Record<string, ButtonStyle>;
@@ -951,8 +1334,33 @@ export class ButtonChain {
       return val as ButtonStyle;
     };
 
-  const target = resolve(presetOrStyle);
-  const revert = resolve(options.revertTo ?? 'BLANK');
+    // Get base style from any pending style changes in this chain
+    const baseStyle: ButtonStyle = { ...this.styleChanges };
+    
+    // Option to preserve existing button state (default: true)
+    const preserveExisting = options.preserveExisting ?? true;
+    
+    const animationStyle = resolve(presetOrStyle);
+    const revertStyle = resolve(options.revertTo ?? (preserveExisting ? {} : 'BLANK'));
+
+    // Merge animation style with base style, preserving existing properties unless explicitly overridden
+    const target: ButtonStyle = preserveExisting 
+      ? { ...baseStyle, ...animationStyle }  // Only override specified properties
+      : animationStyle;  // Replace everything (old behavior)
+      
+    // For revert: if preserveExisting is true, only revert the properties that were animated
+    const revert: ButtonStyle = preserveExisting
+      ? (() => {
+          const result = { ...baseStyle };
+          // Only include revertStyle properties that were actually changed in the animation
+          Object.keys(animationStyle).forEach(key => {
+            if (revertStyle[key as keyof ButtonStyle] !== undefined) {
+              (result as any)[key] = revertStyle[key as keyof ButtonStyle];
+            }
+          });
+          return result;
+        })()
+      : revertStyle;
 
   const intervals = Math.max(1, options.intervals ?? 2);
   const half = Math.round(duration / (intervals * 2));
@@ -961,10 +1369,27 @@ export class ButtonChain {
 
     const runOnce = async () => {
       for (let i = 0; i < intervals && !stopped; i++) {
-        await this.client.updateButtonStyleBody(this.position, target);
+        if (this.client.isNonBlockingAnimationsEnabled()) {
+          // Fire-and-forget requests to avoid blocking animation timing
+          this.client.updateButtonStyleBody(this.position, target).catch(error => {
+            console.warn('Flash animation network error (target):', error);
+          });
+        } else {
+          // Wait for HTTP response (more reliable but may cause stuttering)
+          await this.client.updateButtonStyleBody(this.position, target);
+        }
+        
         await new Promise(r => setTimeout(r, half));
         if (stopped) break;
-        await this.client.updateButtonStyleBody(this.position, revert);
+        
+        if (this.client.isNonBlockingAnimationsEnabled()) {
+          this.client.updateButtonStyleBody(this.position, revert).catch(error => {
+            console.warn('Flash animation network error (revert):', error);
+          });
+        } else {
+          await this.client.updateButtonStyleBody(this.position, revert);
+        }
+        
         await new Promise(r => setTimeout(r, half));
       }
     };
@@ -1067,5 +1492,166 @@ export class ButtonChain {
     // single run
     await runOnce();
     return undefined;
+  }
+
+  /**
+   * Convenience method to animate just the background color while preserving all other properties.
+   * This is a shortcut for .animate({ bgcolor: color }, duration, opts).
+   *
+   * ## Example
+   * ```ts
+   * // Flash red background for 1 second, preserving text and other styles
+   * await client.button(pos).flashBgColor('#FF0000', 1000);
+   * 
+   * // Flash with condition
+   * await client.button(pos).flashBgColor('#FF0000', 1000, () => someCondition);
+   * ```
+   */
+  async flashBgColor(
+    color: string,
+    duration: number = 1000,
+    condition?: boolean | (() => boolean) | (() => Promise<boolean>)
+  ): Promise<(() => void) | void> {
+    const opts = condition !== undefined 
+      ? (typeof condition === 'boolean' ? condition : condition)
+      : {};
+    
+    return this.animate(
+      { bgcolor: color }, 
+      duration, 
+      typeof opts === 'object' ? { type: 'flash', preserveExisting: true, ...opts } : opts
+    );
+  }
+
+  /**
+   * Convenience method to animate just the text color while preserving all other properties.
+   * This is a shortcut for .animate({ color: textColor }, duration, opts).
+   */
+  async flashTextColor(
+    color: string,
+    duration: number = 1000,
+    condition?: boolean | (() => boolean) | (() => Promise<boolean>)
+  ): Promise<(() => void) | void> {
+    const opts = condition !== undefined 
+      ? (typeof condition === 'boolean' ? condition : condition)
+      : {};
+    
+    return this.animate(
+      { color }, 
+      duration, 
+      typeof opts === 'object' ? { type: 'flash', preserveExisting: true, ...opts } : opts
+    );
+  }
+
+  /**
+   * Queue a fade to a specific background color over the given duration.
+   * This preserves existing properties and smoothly transitions the background color
+   * by interpolating between the current color and target color over time.
+   * The fade will execute when apply() is called.
+   *
+   * ## Example
+   * ```ts
+   * // Queue a fade to black, then apply all changes
+   * await client.button(pos)
+   *   .bgcolor('#FF0000')
+   *   .text('Hello')
+   *   .fadeTo('#000000', 500)
+   *   .apply();
+   * ```
+   */
+  fadeTo(
+    targetColor: string,
+    duration: number = 1000,
+    condition?: boolean | (() => boolean) | (() => Promise<boolean>)
+  ): this {
+    this.operations.push({
+      type: 'fade',
+      data: { type: 'fadeTo', params: [targetColor, duration, condition] }
+    });
+    return this;
+  }
+
+  /**
+   * Execute a sequence of fade animations to different colors.
+   * Each fade preserves existing properties and only changes the background color.
+   * The sequence will execute when apply() is called.
+   *
+   * ## Parameters
+   * @param sequence - Array of objects with { color: string, duration: number }
+   * @param condition - Optional condition to check before running the sequence
+   *
+   * ## Example
+   * ```ts
+   * // Queue fade to black (500ms), then to red (1000ms)
+   * await client.button(pos)
+   *   .text('Hello')
+   *   .fadeSequence([
+   *     { color: '#000000', duration: 500 },
+   *     { color: '#FF0000', duration: 1000 }
+   *   ])
+   *   .apply();
+   * ```
+   */
+  fadeSequence(
+    sequence: Array<{ color: string; duration: number }>,
+    condition?: boolean | (() => boolean) | (() => Promise<boolean>)
+  ): this {
+    this.operations.push({
+      type: 'fade',
+      data: { type: 'fadeSequence', params: [sequence, condition] }
+    });
+    return this;
+  }
+
+  /**
+   * Queue a fade to black (darken) over the given duration.
+   * This is a convenience method for fadeTo('#000000', duration).
+   * The fade will execute when apply() is called.
+   *
+   * ## Example
+   * ```ts
+   * // Queue fade to black over 1 second
+   * await client.button(pos)
+   *   .text('Hello')
+   *   .fadeToBlack(1000)
+   *   .apply();
+   * ```
+   */
+  fadeToBlack(
+    duration: number = 1000,
+    condition?: boolean | (() => boolean) | (() => Promise<boolean>)
+  ): this {
+    this.operations.push({
+      type: 'fade',
+      data: { type: 'fadeToBlack', params: [duration, condition] }
+    });
+    return this;
+  }
+
+  /**
+   * Queue a fade out (to black) then fade in (to target color) sequence.
+   * This creates a classic fade-out/fade-in effect.
+   * The sequence will execute when apply() is called.
+   *
+   * ## Example
+   * ```ts
+   * // Queue fade to black (500ms) then fade to red (1000ms)
+   * await client.button(pos)
+   *   .text('Hello')
+   *   .fadeOutIn('#FF0000', 500, 1000)
+   *   .apply();
+   * ```
+   */
+  fadeOutIn(
+    targetColor: string,
+    fadeOutDuration: number = 500,
+    fadeInDuration: number = 1000,
+    condition?: boolean | (() => boolean) | (() => Promise<boolean>)
+  ): this {
+    this.operations.push({
+      type: 'fade',
+      data: { type: 'fadeOutIn', params: [targetColor, fadeOutDuration, fadeInDuration, condition] }
+    });
+    return this;
   }
 }

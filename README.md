@@ -64,6 +64,138 @@ await client.updateButtonStyle(
 await client.setButtonText({ page: 1, row: 0, column: 2 }, "LIVE");
 ```
 
+### Fluent chaining (new, recommended for multiple changes)
+
+You can still use the legacy single-purpose methods (examples above). A new
+fluent API is available via `client.button(position)` that lets you batch
+style updates and queue actions in a single, chainable call. This reduces the
+number of HTTP requests and reads nicely in code.
+
+Legacy example (single call):
+
+```typescript
+await client.setButtonBackgroundColor({ page: 1, row: 0, column: 2 }, '#FF0000');
+// Companion endpoint used (example):
+// /api/location/1/0/2/style?bgcolor=%23FF0000
+```
+
+Fluent example (chain multiple changes/actions in one line):
+
+```typescript
+await client
+  .button({ page: 1, row: 0, column: 2 })
+  .text('LIVE')
+  .bgcolor('#FF0000')
+  .color('#FFFFFF')
+  .press()
+  .apply();
+
+// Companion endpoints involved (examples):
+// POST /api/location/1/0/2/style   (body with text/bgcolor/color)
+// POST /api/location/1/0/2/press   (queued action executed after style)
+```
+
+Notes:
+- The fluent API batches style changes into a single `POST /api/location/<page>/<row>/<col>/style` body request when you call `.apply()`.
+- Actions queued on the chain (like `.press()`, `.down()`, `.up()`) are executed sequentially after the style update.
+- Both the legacy and fluent methods coexist; use whichever fits your needs. The fluent API is recommended when changing multiple fields or running an action immediately after styling.
+
+Try it — minimal example
+
+```typescript
+import { StreamDeckClient } from './streamdeck';
+
+const client = new StreamDeckClient({ baseUrl: 'http://127.0.0.1:8000' });
+const pos = { page: 1, row: 0, column: 2 };
+
+// Fluent: set text+colors and press the button
+await client.button(pos).text('Ping').bgcolor('#112233').color('#FFFFFF').press().apply();
+
+// Legacy: single-purpose call
+await client.setButtonText(pos, 'Ping');
+```
+
+### Conditional chaining
+
+The fluent API supports conditional chaining so you don't need to wrap calls in `if` statements.
+Use `.when()` / `.unless()` for synchronous predicates, and `.whenAsync()` / `.unlessAsync()` for async checks.
+
+Synchronous example:
+
+```typescript
+// Update only when this transition occurred
+await client
+  .button({ page: 1, row: 2, column: 1 })
+  .when(() => sideSwapEnabled && !wasPrevSwapEnabled)
+  .text('Side Swapped')
+  .bgcolor(COLORS.SUCCESS)
+  .apply();
+
+await client
+  .button({ page: 2, row: 1, column: 0 })
+  .when(() => sideSwapEnabled && !wasPrevSwapEnabled)
+  .text('Side Swapped')
+  .bgcolor(COLORS.SUCCESS)
+  .apply();
+```
+
+Parallel example with a precomputed boolean:
+
+```typescript
+const becameEnabled = sideSwapEnabled && !wasPrevSwapEnabled;
+await Promise.all([
+  localStreamDeckClient.button({ page:1,row:2,column:1 }).when(becameEnabled).text('Side Swapped').bgcolor(COLORS.SUCCESS).apply(),
+  streamDeckClient.button({ page:2,row:1,column:0 }).when(becameEnabled).text('Side Swapped').bgcolor(COLORS.SUCCESS).apply()
+]);
+```
+
+Async predicate example (useful for remote checks):
+
+```typescript
+await client
+  .button(pos)
+  .whenAsync(async () => await isFeatureEnabled())
+  .text('Feature On')
+  .apply();
+```
+
+Inline predicate usage with `animate()`
+
+You can also pass a boolean or a predicate directly into `animate()` as the third argument. This is handy when the animation should only run under a short-lived condition and you prefer keeping it inline instead of calling `.when()` / `.whenAsync()`.
+
+```typescript
+// Sync predicate: only run when round === 9
+await client.button(pos).animate('SUCCESS', 800, () => round === 9);
+
+// Async predicate: await an external check
+await client.button(pos).animate('SUCCESS', 800, async () => await isRoundActive());
+```
+
+### Animate from the chain
+
+The fluent API includes a small `animate()` helper for quick flash/pulse effects. It accepts either a preset name (from `BUTTON_PRESETS`) or a `ButtonStyle`.
+
+Single-run flash:
+
+```typescript
+await client.button(pos).animate('SUCCESS', 1000, { type: 'flash', intervals: 3 });
+```
+
+Looping pulse (returns a stop function):
+
+```typescript
+const stop = await client.button(pos).animate({ bgcolor: '#112233' }, 800, { type: 'flash', loop: true });
+// later
+stop();
+```
+
+Notes:
+- `animate()` is convenient for single-button or user-triggered effects. For high-performance multi-button animations prefer the `Animator` which coalesces updates via `executeBatch()`.
+- Conditional chaining works with `animate()` as well, e.g. `.when(...)` / `.whenAsync(...)` before `.animate()`.
+ - Conditional chaining works with `animate()` as well in two ways:
+   1) Use `.when()` / `.whenAsync()` before `.animate()` to set chain-level predicates.
+   2) Pass a boolean or predicate directly as the third argument to `.animate()` to check the condition inline for that call. Inline predicates will be re-evaluated while looped animations run and will stop the animation when they become false.
+
 ### Custom Variables
 
 ```typescript

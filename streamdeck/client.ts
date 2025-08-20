@@ -131,6 +131,9 @@ export class StreamDeckClient {
 
   /**
    * Press and release a button (run both down and up actions)
+  *
+  * @example
+  * /api/location/0/0/0/press
    */
   async pressButton(position: ButtonPosition): Promise<void> {
     const path = `/api/location/${position.page}/${position.row}/${position.column}/press`;
@@ -146,6 +149,9 @@ export class StreamDeckClient {
 
   /**
    * Press the button (run down actions and hold)
+  *
+  * @example
+  * /api/location/0/0/0/down
    */
   async pressButtonDown(position: ButtonPosition): Promise<void> {
     const path = `/api/location/${position.page}/${position.row}/${position.column}/down`;
@@ -161,6 +167,9 @@ export class StreamDeckClient {
 
   /**
    * Release the button (run up actions)
+  *
+  * @example
+  * /api/location/0/0/0/up
    */
   async releaseButton(position: ButtonPosition): Promise<void> {
     const path = `/api/location/${position.page}/${position.row}/${position.column}/up`;
@@ -176,6 +185,9 @@ export class StreamDeckClient {
 
   /**
    * Trigger a left rotation of the button/encoder
+  *
+  * @example
+  * /api/location/0/0/0/rotate-left
    */
   async rotateLeft(position: ButtonPosition): Promise<void> {
     const path = `/api/location/${position.page}/${position.row}/${position.column}/rotate-left`;
@@ -191,6 +203,9 @@ export class StreamDeckClient {
 
   /**
    * Trigger a right rotation of the button/encoder
+  *
+  * @example
+  * /api/location/0/0/0/rotate-right
    */
   async rotateRight(position: ButtonPosition): Promise<void> {
     const path = `/api/location/${position.page}/${position.row}/${position.column}/rotate-right`;
@@ -206,6 +221,9 @@ export class StreamDeckClient {
 
   /**
    * Set the current step of a button/encoder
+  *
+  * @example
+  * /api/location/0/0/0/step?step=5
    */
   async setButtonStep(position: ButtonPosition, step: number): Promise<void> {
     const path = `/api/location/${position.page}/${position.row}/${position.column}/step`;
@@ -226,6 +244,10 @@ export class StreamDeckClient {
 
   /**
    * Update button style using query parameters
+  *
+  * @example
+  * // query-style update
+  * /api/location/0/0/0/style?text=Hello&bgcolor=%23112233
    */
   async updateButtonStyle(position: ButtonPosition, style: ButtonStyle): Promise<void> {
     const path = `/api/location/${position.page}/${position.row}/${position.column}/style`;
@@ -248,7 +270,19 @@ export class StreamDeckClient {
   }
 
   /**
-   * Update button style using request body (for complex updates)
+  * Update button style using request body (for complex updates)
+  *
+  * @example
+  * // body-style update
+  * /api/location/0/0/0/style
+  *
+  * Example (legacy):
+  *   // sets multiple fields in one request
+  *   await client.updateButtonStyleBody(pos, { text: 'Hi', bgcolor: '#000000', color: '#FFFFFF', size: 18 });
+  *
+  * Example (preferred fluent style):
+  *   // same as above using chaining
+  *   await client.button(pos).text('Hi').bgcolor('#000000').color('#FFFFFF').size(18).apply();
    */
   async updateButtonStyleBody(position: ButtonPosition, style: ButtonStyle): Promise<void> {
     const path = `/api/location/${position.page}/${position.row}/${position.column}/style`;
@@ -264,32 +298,82 @@ export class StreamDeckClient {
   }
 
   /**
-   * Change background color of button
+  * Change background color of button.
+  *
+  * @example
+  * /api/location/0/0/0/style?bgcolor=%23FF0000
+  *
+  * Example (legacy):
+  *   await client.setButtonBackgroundColor(pos, '#FF0000');
+  *
+  * Equivalent using the fluent API (allows chaining more changes/actions):
+  *   await client.button(pos).bgcolor('#FF0000').apply();
    */
   async setButtonBackgroundColor(position: ButtonPosition, color: string): Promise<void> {
     await this.updateButtonStyle(position, { bgcolor: color });
   }
 
   /**
-   * Change text color of button
+  * Change text color of button.
+  *
+  * @example
+  * /api/location/0/0/0/style?color=%2300FF00
+  *
+  * Example (legacy):
+  *   await client.setButtonTextColor(pos, '#00FF00');
+  *
+  * Equivalent using fluent API:
+  *   await client.button(pos).color('#00FF00').apply();
    */
   async setButtonTextColor(position: ButtonPosition, color: string): Promise<void> {
     await this.updateButtonStyle(position, { color });
   }
 
   /**
-   * Change text on a button
+  * Change text on a button.
+  *
+  * @example
+  * /api/location/0/0/0/style?text=Hello
+  *
+  * Example (legacy):
+  *   await client.setButtonText(pos, 'Hello');
+  *
+  * Equivalent using fluent API (you can chain additional style changes or actions):
+  *   await client.button(pos).text('Hello').bgcolor('#333333').apply();
    */
   async setButtonText(position: ButtonPosition, text: string): Promise<void> {
     await this.updateButtonStyle(position, { text });
   }
 
   /**
-   * Change text size on a button
+  * Change text size on a button.
+  *
+  * @example
+  * /api/location/0/0/0/style?size=20
+  *
+  * Example (legacy):
+  *   await client.setButtonTextSize(pos, 20);
+  *
+  * Equivalent using fluent API:
+  *   await client.button(pos).size(20).apply();
    */
   async setButtonTextSize(position: ButtonPosition, size: number): Promise<void> {
     await this.updateButtonStyle(position, { size });
   }
+
+  // =============================================================================
+  // FLUENT / CHAINING API
+  // =============================================================================
+
+  /**
+   * Start a fluent builder for operations against a single button position.
+   * Example: await client.button(pos).text('Hi').bgcolor('#FF0000').color('#FFFFFF').apply();
+   */
+  button(position: ButtonPosition): ButtonChain {
+    return new ButtonChain(this, position);
+  }
+
+
 
   // =============================================================================
   // CUSTOM VARIABLES
@@ -461,6 +545,7 @@ export class StreamDeckClient {
     } : null;
   }
 
+
   // =============================================================================
   // EVENT HANDLING
   // =============================================================================
@@ -494,5 +579,463 @@ export class StreamDeckClient {
       retries: this.retries,
       defaultHeaders: { ...this.defaultHeaders }
     };
+  }
+
+  /**
+   * Lazy-create and return an Animator tied to this client.
+   * Uses dynamic import to avoid circular module load issues.
+   */
+  private _animator?: any;
+  async getAnimator(fps: number = 15): Promise<any> {
+    if (this._animator) return this._animator;
+    const mod = await import('./animator');
+    this._animator = new mod.Animator(this, fps);
+    return this._animator;
+  }
+}
+
+/**
+ * Fluent builder for button operations (styles + basic actions).
+ * Collects style changes and can apply them in one request.
+ */
+/**
+ * Fluent ButtonChain builder.
+ *
+ * Use this to batch style changes and queue actions for a single button. All
+ * style changes are sent in one request when you call `apply()`.
+ *
+ * Example (fluent):
+ *   await client.button(pos)
+ *     .text('Hello')
+ *     .bgcolor('#112233')
+ *     .color('#FFFFFF')
+ *     .press()
+ *     .apply();
+ *
+ * The fluent style is handy when you want to set multiple fields or run an
+ * action right after styling without multiple separate calls.
+ */
+export class ButtonChain {
+  private client: StreamDeckClient;
+  private position: ButtonPosition;
+  private styleChanges: Partial<ButtonStyle> = {};
+  private actions: Array<() => Promise<void>> = [];
+  private enabled = true;
+  private condition?: () => boolean;
+  private asyncCondition?: () => Promise<boolean>;
+
+  constructor(client: StreamDeckClient, position: ButtonPosition) {
+    this.client = client;
+    this.position = position;
+  }
+
+  // Style setters
+  /**
+   * Set the button text. Chaining example:
+   *   client.button(pos).text('Hi').bgcolor('#000').apply();
+  *
+  * @example
+  * /api/location/0/0/0/style (body or ?text=...)
+   */
+  text(text: string): this {
+  if (typeof text !== 'string') throw new TypeError('text must be a string');
+  // Reasonable limit to avoid sending huge payloads
+  if (text.length > 200) throw new RangeError('text length must be <= 200 characters');
+  this.styleChanges.text = text;
+  return this;
+  }
+
+  bgcolor(color: string): this {
+  /**
+   * Set the button background color (hex). Chainable.
+   * Example: client.button(pos).bgcolor('#FF0000').color('#000000').apply();
+   *
+   * @example
+   * /api/location/0/0/0/style?bgcolor=%23FF0000
+   */
+  if (typeof color !== 'string') throw new TypeError('bgcolor must be a string');
+  if (!StreamDeckClient.isValidHexColor(color)) throw new RangeError(`bgcolor must be a valid hex color like #RRGGBB: ${color}`);
+  this.styleChanges.bgcolor = color;
+  return this;
+  }
+
+  color(color: string): this {
+  /** Set the button text color (hex).
+   *
+   * @example
+   * /api/location/0/0/0/style?color=%2300FF00
+   */
+  if (typeof color !== 'string') throw new TypeError('color must be a string');
+  if (!StreamDeckClient.isValidHexColor(color)) throw new RangeError(`color must be a valid hex color like #RRGGBB: ${color}`);
+  this.styleChanges.color = color;
+  return this;
+  }
+
+  size(size: number): this {
+  /** Set the text size (integer 1-72).
+   *
+   * @example
+   * /api/location/0/0/0/style?size=20
+   */
+  if (typeof size !== 'number' || !Number.isFinite(size)) throw new TypeError('size must be a finite number');
+  if (!Number.isInteger(size) || size <= 0 || size > 72) throw new RangeError('size must be an integer between 1 and 72');
+  this.styleChanges.size = size;
+  return this;
+  }
+
+  // Action enqueuers
+  press(): this {
+  /** Queue a press action to run after styles are applied.
+   *
+   * @example
+   * /api/location/0/0/0/press
+   */
+  this.actions.push(() => this.client.pressButton(this.position));
+    return this;
+  }
+
+  down(): this {
+  /** Queue a down (press-and-hold) action.
+   *
+   * @example
+   * /api/location/0/0/0/down
+   */
+  this.actions.push(() => this.client.pressButtonDown(this.position));
+    return this;
+  }
+
+  up(): this {
+  /** Queue a release (up) action.
+   *
+   * @example
+   * /api/location/0/0/0/up
+   */
+  this.actions.push(() => this.client.releaseButton(this.position));
+    return this;
+  }
+
+  rotateLeft(): this {
+  /** Queue a rotate-left action.
+   *
+   * @example
+   * /api/location/0/0/0/rotate-left
+   */
+  this.actions.push(() => this.client.rotateLeft(this.position));
+    return this;
+  }
+
+  rotateRight(): this {
+  /** Queue a rotate-right action.
+   *
+   * @example
+   * /api/location/0/0/0/rotate-right
+   */
+  this.actions.push(() => this.client.rotateRight(this.position));
+    return this;
+  }
+
+  step(n: number): this {
+  /** Queue a set step action (integer).
+   *
+   * @example
+   * /api/location/0/0/0/step?step=5
+   */
+  if (typeof n !== 'number' || !Number.isFinite(n) || !Number.isInteger(n)) throw new TypeError('step must be an integer');
+  this.actions.push(() => this.client.setButtonStep(this.position, n));
+  return this;
+  }
+
+  /**
+   * Apply collected style changes and then execute queued actions in sequence.
+   * If no style changes were made, only actions run.
+   */
+  async apply(): Promise<void> {
+    // Evaluate condition (if supplied) lazily at apply time. This allows
+    // .when(() => expensiveCheck()) usage as well as simple booleans via
+    // .when(true/false), and supports async predicates via whenAsync().
+    let finalEnabled = this.enabled;
+    if (this.asyncCondition) {
+      try {
+        finalEnabled = Boolean(await this.asyncCondition());
+      } catch {
+        finalEnabled = false;
+      }
+    } else if (this.condition) {
+      finalEnabled = Boolean(this.condition());
+    }
+
+    if (!finalEnabled) return;
+    if (Object.keys(this.styleChanges).length > 0) {
+      // Use body-style update for combined fields
+      await this.client.updateButtonStyleBody(this.position, this.styleChanges as ButtonStyle);
+    }
+
+    for (const action of this.actions) {
+      await action();
+      // small delay to avoid overwhelming the API
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+  }
+
+  /**
+   * Convenience: apply and return the client for further chaining across buttons
+   */
+  async applyAndContinue(): Promise<StreamDeckClient> {
+    await this.apply();
+    return this.client;
+  }
+
+  /**
+   * Only enable the chain if condition is truthy. Useful to avoid wrapping code in `if`.
+   * Example: client.button(pos).when(isLive).bgcolor('#F00').apply();
+   */
+  when(condition: boolean | (() => boolean)): this {
+    if (typeof condition === 'function') {
+      this.condition = condition as () => boolean;
+    } else {
+      this.condition = undefined;
+      this.enabled = Boolean(condition);
+    }
+    return this;
+  }
+
+  /**
+   * Inverse of `when` - enable only when condition is falsy.
+   */
+  unless(condition: boolean | (() => boolean)): this {
+    if (typeof condition === 'function') {
+      const fn = condition as () => boolean;
+      this.condition = () => !fn();
+    } else {
+      this.condition = undefined;
+      this.enabled = !Boolean(condition);
+    }
+    return this;
+  }
+
+  /**
+   * Like `when` but accepts an async predicate. The predicate is awaited at
+   * `apply()`/`animate()` time. Example:
+   *   await client.button(pos).whenAsync(async () => await isUserAllowed()).text('OK').apply();
+   */
+  whenAsync(predicate: () => Promise<boolean>): this {
+    this.asyncCondition = predicate;
+    // clear sync condition to avoid confusion
+    this.condition = undefined;
+    return this;
+  }
+
+  /**
+   * Inverse of `whenAsync` - enable only when async predicate resolves to false.
+   */
+  unlessAsync(predicate: () => Promise<boolean>): this {
+    this.asyncCondition = async () => !(await predicate());
+    this.condition = undefined;
+    return this;
+  }
+
+  /**
+   * Convenience animate helper for this button chain.
+   * Accepts either a preset name (from `BUTTON_PRESETS`) or a full `ButtonStyle`.
+   * The third argument may be either:
+   *  - an options object: { type?: 'flash'|'pulse'|'fade'|'rainbow', intervals?, loop?, revertTo?, fromColor?, toColor? }
+   *  - a boolean `true|false` which simply enables/disables the animation for this call
+   *  - a sync predicate `() => boolean` or async predicate `() => Promise<boolean>` which is evaluated
+   *    before the animation runs; if the animation loops the inline predicate is re-checked and the
+   *    animation will stop when it becomes false.
+   *
+   * Examples:
+   *   // flash a preset style for 1s (single run)
+   *   await client.button(pos).animate('SUCCESS', 1000, { type: 'flash', intervals: 3 });
+   *
+   *   // continuous pulse until stopped (returns a stop function)
+   *   const stop = await client.button(pos).animate({ bgcolor: '#112233' }, 800, { type: 'flash', loop: true });
+   *   // later
+   *   stop?.();
+   *
+   *   // inline predicate (sync): only animate when round === 9
+   *   await client.button(pos).animate('SUCCESS', 800, () => round === 9);
+   *
+   *   // inline predicate (async) with no options:
+   *   await client.button(pos).animate('SUCCESS', 800, async () => await isRoundActive());
+   *
+   * Notes:
+   * - If `presetOrStyle` is a string, it will be resolved against `BUTTON_PRESETS` at runtime.
+   * - When `opts.loop` is true the method returns a stop function; otherwise it completes when done.
+   * - If you need both an inline predicate and looping options, you can use `.when()` / `.whenAsync()`
+   *   before calling `.animate()` to keep the predicate and options separate.
+   */
+  async animate(
+    presetOrStyle: keyof any | ButtonStyle,
+    duration: number = 1000,
+    opts: boolean | (() => boolean) | (() => Promise<boolean>) | { type?: 'flash' | 'pulse' | 'fade' | 'rainbow'; intervals?: number; loop?: boolean; revertTo?: keyof any | ButtonStyle; fromColor?: string; toColor?: string } = {}
+  ): Promise<(() => void) | void> {
+    // Normalize inline predicate vs options. Allow calling .animate(..., true) or
+    // .animate(..., () => condition) or .animate(..., async () => await check())
+    let inlineSyncCondition: (() => boolean) | undefined;
+    let inlineAsyncCondition: (() => Promise<boolean>) | undefined;
+    let options: { type?: 'flash' | 'pulse' | 'fade' | 'rainbow'; intervals?: number; loop?: boolean; revertTo?: keyof any | ButtonStyle; fromColor?: string; toColor?: string } = {};
+
+    if (typeof opts === 'boolean') {
+      inlineSyncCondition = () => opts;
+    } else if (typeof opts === 'function') {
+      // Could be sync or async - wrap into async predicate for safety
+      const fn = opts as any;
+      inlineAsyncCondition = async () => Promise.resolve(fn());
+    } else {
+      options = opts;
+    }
+
+    // Evaluate conditional predicate before running animation (supports async predicate)
+    let finalEnabled = this.enabled;
+    if (this.asyncCondition) {
+      try {
+        finalEnabled = Boolean(await this.asyncCondition());
+      } catch {
+        finalEnabled = false;
+      }
+    } else if (this.condition) {
+      finalEnabled = Boolean(this.condition());
+    }
+
+    // Evaluate inline condition last so it can short-circuit per-call
+    if (inlineAsyncCondition) {
+      try {
+        finalEnabled = Boolean(await inlineAsyncCondition());
+      } catch {
+        finalEnabled = false;
+      }
+    } else if (inlineSyncCondition) {
+      finalEnabled = Boolean(inlineSyncCondition());
+    }
+
+    if (!finalEnabled) return undefined;
+    // Resolve presets dynamically to avoid circular import issues at module load
+    const utils = await import('./utils');
+    const BUTTON_PRESETS = (utils as any).BUTTON_PRESETS as Record<string, ButtonStyle>;
+    const createButtonStyle = (utils as any).createButtonStyle as (p: string, o?: Partial<ButtonStyle>) => ButtonStyle;
+
+    const resolve = (val: any): ButtonStyle => {
+      if (!val) return {} as ButtonStyle;
+      if (typeof val === 'string') return BUTTON_PRESETS[val] ?? ({ bgcolor: '#000000' } as ButtonStyle);
+      return val as ButtonStyle;
+    };
+
+  const target = resolve(presetOrStyle);
+  const revert = resolve(options.revertTo ?? 'BLANK');
+
+  const intervals = Math.max(1, options.intervals ?? 2);
+  const half = Math.round(duration / (intervals * 2));
+
+    let stopped = false;
+
+    const runOnce = async () => {
+      for (let i = 0; i < intervals && !stopped; i++) {
+        await this.client.updateButtonStyleBody(this.position, target);
+        await new Promise(r => setTimeout(r, half));
+        if (stopped) break;
+        await this.client.updateButtonStyleBody(this.position, revert);
+        await new Promise(r => setTimeout(r, half));
+      }
+    };
+
+    const loopFlag = (options.loop ?? (opts && typeof opts === 'object' ? (opts as any).loop : undefined)) ?? false;
+
+    if (loopFlag) {
+      const resolvedTarget = target;
+      const fromColor = (options.fromColor ?? (opts && typeof opts === 'object' ? (opts as any).fromColor : undefined)) ?? resolvedTarget.bgcolor ?? undefined;
+      const toColor = (options.toColor ?? (opts && typeof opts === 'object' ? (opts as any).toColor : undefined)) ?? (options.type === 'fade' || (opts && typeof opts === 'object' && (opts as any).type === 'fade') ? revert.bgcolor : undefined) ?? undefined;
+
+      // Prefer Animator for continuous loops when possible. Choose the right animator method by type.
+      try {
+        const animator = await this.client.getAnimator();
+        let id: string | undefined;
+
+  if (options.type === 'rainbow') {
+          id = animator.createRainbow(this.position, { ...resolvedTarget }, {
+            duration,
+            loop: true,
+            intervals: options.intervals ?? 1
+          });
+  } else if (options.type === 'fade' || (fromColor && toColor)) {
+          // fade between fromColor -> toColor
+          id = animator.createFade(this.position, { ...resolvedTarget }, {
+            duration,
+            loop: true,
+            fromColor: fromColor ?? '#000000',
+            toColor: toColor ?? '#000000',
+            intervals: options.intervals ?? 1
+          });
+        } else {
+          // default to flash/pulse using createFlash
+          const flashColor = options.fromColor ?? resolvedTarget.bgcolor ?? '#FFFFFF';
+          id = animator.createFlash(this.position, { ...resolvedTarget }, {
+            duration,
+            loop: true,
+            flashColor,
+            intervals: options.intervals ?? 2
+          });
+        }
+
+        if (id) {
+          // If an inline predicate was provided, start a watcher that stops
+          // the animation when the predicate becomes false.
+          let watcherStop = false;
+          if (inlineAsyncCondition || inlineSyncCondition) {
+            (async () => {
+              while (!watcherStop) {
+                let ok = true;
+                try {
+                  if (inlineAsyncCondition) ok = Boolean(await inlineAsyncCondition());
+                  else if (inlineSyncCondition) ok = Boolean(inlineSyncCondition());
+                } catch {
+                  ok = false;
+                }
+                if (!ok) {
+                  try { animator.stopAnimation(id as string); } catch {}
+                  break;
+                }
+                // Re-check at reasonable intervals (half the duration)
+                await new Promise(r => setTimeout(r, Math.max(200, Math.round(duration / 2))));
+              }
+            })().catch(() => {});
+          }
+
+          return () => {
+            watcherStop = true;
+            try { animator.stopAnimation(id as string); } catch {}
+          };
+        }
+      } catch (e) {
+        // If Animator isn't available or fails, fall back to the simple loop below
+      }
+
+      // fallback: run in background until stopped, but re-evaluate inline predicate
+      (async () => {
+        while (!stopped) {
+          // If inline predicate exists, check before each iteration
+          if (inlineAsyncCondition) {
+            try {
+              const ok = Boolean(await inlineAsyncCondition());
+              if (!ok) break;
+            } catch {
+              break;
+            }
+          } else if (inlineSyncCondition) {
+            if (!inlineSyncCondition()) break;
+          }
+
+          await runOnce();
+        }
+      })().catch(() => {});
+
+      return () => {
+        stopped = true;
+      };
+    }
+
+    // single run
+    await runOnce();
+    return undefined;
   }
 }

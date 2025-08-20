@@ -9,6 +9,10 @@
  */
 
 // Core exports
+import { StreamDeckClient } from './client';
+import { Animator } from './animator';
+import type { StreamDeckConfig } from './types';
+
 export { StreamDeckClient } from './client';
 export * from './types';
 
@@ -35,6 +39,10 @@ export {
   truncateText
 } from './utils';
 
+export { Animator } from './animator';
+export * from './animations';
+export { createPreviewBridge } from './preview';
+
 // Factory function for easy client creation
 export function createStreamDeckClient(config: StreamDeckConfig): StreamDeckClient {
   return new StreamDeckClient(config);
@@ -55,6 +63,13 @@ export function createRemoteStreamDeckClient(host: string, port: number = 8000):
     timeout: 10000,
     retries: 2
   });
+}
+
+/**
+ * Convenience factory for Animator
+ */
+export function createAnimator(client: StreamDeckClient, fps: number = 15) {
+  return new Animator(client, fps);
 }
 
 // Version information

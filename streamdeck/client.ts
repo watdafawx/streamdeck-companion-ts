@@ -903,7 +903,8 @@ export class ButtonChain {
   * @example
   * /api/location/0/0/0/style (body or ?text=...)
    */
-  text(text: string): this {
+  text(text: string, enabled: boolean = true): this {
+  if (!enabled) return this; // Skip if disabled
   if (typeof text !== 'string') throw new TypeError('text must be a string');
   // Reasonable limit to avoid sending huge payloads
   if (text.length > 200) throw new RangeError('text length must be <= 200 characters');
@@ -911,7 +912,7 @@ export class ButtonChain {
   return this;
   }
 
-  bgcolor(color: string): this {
+  bgcolor(color: string, enabled: boolean = true): this {
   /**
    * Set the button background color (hex). Chainable.
    * Example: client.button(pos).bgcolor('#FF0000').color('#000000').apply();
@@ -919,30 +920,33 @@ export class ButtonChain {
    * @example
    * /api/location/0/0/0/style?bgcolor=%23FF0000
    */
+  if (!enabled) return this; // Skip if disabled
   if (typeof color !== 'string') throw new TypeError('bgcolor must be a string');
   if (!StreamDeckClient.isValidHexColor(color)) throw new RangeError(`bgcolor must be a valid hex color like #RRGGBB: ${color}`);
   this.styleChanges.bgcolor = color;
   return this;
   }
 
-  color(color: string): this {
+  color(color: string, enabled: boolean = true): this {
   /** Set the button text color (hex).
    *
    * @example
    * /api/location/0/0/0/style?color=%2300FF00
    */
+  if (!enabled) return this; // Skip if disabled
   if (typeof color !== 'string') throw new TypeError('color must be a string');
   if (!StreamDeckClient.isValidHexColor(color)) throw new RangeError(`color must be a valid hex color like #RRGGBB: ${color}`);
   this.styleChanges.color = color;
   return this;
   }
 
-  size(size: number): this {
+  size(size: number, enabled: boolean = true): this {
   /** Set the text size (integer 1-72).
    *
    * @example
    * /api/location/0/0/0/style?size=20
    */
+  if (!enabled) return this; // Skip if disabled
   if (typeof size !== 'number' || !Number.isFinite(size)) throw new TypeError('size must be a finite number');
   if (!Number.isInteger(size) || size <= 0 || size > 72) throw new RangeError('size must be an integer between 1 and 72');
   this.styleChanges.size = size;
@@ -950,62 +954,68 @@ export class ButtonChain {
   }
 
   // Action enqueuers
-  press(): this {
+  press(enabled: boolean = true): this {
   /** Queue a press action to run after styles are applied.
    *
    * @example
    * /api/location/0/0/0/press
    */
+  if (!enabled) return this; // Skip if disabled
   this.operations.push({ type: 'action', data: () => this.client.pressButton(this.position) });
     return this;
   }
 
-  down(): this {
+  down(enabled: boolean = true): this {
   /** Queue a down (press-and-hold) action.
    *
    * @example
    * /api/location/0/0/0/down
    */
+  if (!enabled) return this; // Skip if disabled
   this.operations.push({ type: 'action', data: () => this.client.pressButtonDown(this.position) });
     return this;
   }
 
-  up(): this {
+  up(enabled: boolean = true): this {
   /** Queue a release (up) action.
    *
    * @example
    * /api/location/0/0/0/up
    */
+  if (!enabled) return this; // Skip if disabled
   this.operations.push({ type: 'action', data: () => this.client.releaseButton(this.position) });
     return this;
   }
 
-  rotateLeft(): this {
+  rotateLeft(enabled: boolean = true): this {
   /** Queue a rotate-left action.
    *
    * @example
    * /api/location/0/0/0/rotate-left
    */
+  if (!enabled) return this; // Skip if disabled
   this.operations.push({ type: 'action', data: () => this.client.rotateLeft(this.position) });
     return this;
   }
 
-  rotateRight(): this {
+  rotateRight(enabled: boolean = true): this {
   /** Queue a rotate-right action.
    *
    * @example
    * /api/location/0/0/0/rotate-right
    */
+  if (!enabled) return this; // Skip if disabled
   this.operations.push({ type: 'action', data: () => this.client.rotateRight(this.position) });
     return this;
   }
 
-  step(n: number): this {
+  step(n: number, enabled: boolean = true): this {
   /** Queue a set step action (integer).
    *
    * @example
    * /api/location/0/0/0/step?step=5
    */
+  if (!enabled) return this; // Skip if disabled
   if (typeof n !== 'number' || !Number.isFinite(n) || !Number.isInteger(n)) throw new TypeError('step must be an integer');
   this.operations.push({ type: 'action', data: () => this.client.setButtonStep(this.position, n) });
   return this;
@@ -1681,7 +1691,8 @@ export class ButtonChain {
    *   .apply();
    * ```
    */
-  setCustomVar(name: string, value: string): this {
+  setCustomVar(name: string, value: string, enabled: boolean = true): this {
+    if (!enabled) return this; // Skip if disabled
     this.operations.push({
       type: 'action',
       data: () => this.client.setCustomVariable(name, value)
@@ -1692,8 +1703,8 @@ export class ButtonChain {
   /**
    * Alias for setCustomVar for shorter syntax
    */
-  setVar(name: string, value: string): this {
-    return this.setCustomVar(name, value);
+  setVar(name: string, value: string, enabled: boolean = true): this {
+    return this.setCustomVar(name, value, enabled);
   }
 
   /**
@@ -1712,7 +1723,8 @@ export class ButtonChain {
    *   .apply();
    * ```
    */
-  setCustomVars(variables: Record<string, string>): this {
+  setCustomVars(variables: Record<string, string>, enabled: boolean = true): this {
+    if (!enabled) return this; // Skip if disabled
     Object.entries(variables).forEach(([name, value]) => {
       this.operations.push({
         type: 'action',
@@ -1725,8 +1737,8 @@ export class ButtonChain {
   /**
    * Alias for setCustomVars for shorter syntax
    */
-  setVars(variables: Record<string, string>): this {
-    return this.setCustomVars(variables);
+  setVars(variables: Record<string, string>, enabled: boolean = true): this {
+    return this.setCustomVars(variables, enabled);
   }
 
   // =============================================================================
@@ -1790,7 +1802,8 @@ export class SystemChain {
    *   .apply();
    * ```
    */
-  setVar(name: string, value: string): this {
+  setVar(name: string, value: string, enabled: boolean = true): this {
+    if (!enabled) return this; // Skip if disabled
     this.operations.push(() => this.client.setCustomVariable(name, value));
     return this;
   }
@@ -1809,7 +1822,8 @@ export class SystemChain {
    *   .apply();
    * ```
    */
-  setVars(variables: Record<string, string>): this {
+  setVars(variables: Record<string, string>, enabled: boolean = true): this {
+    if (!enabled) return this; // Skip if disabled
     Object.entries(variables).forEach(([name, value]) => {
       this.operations.push(() => this.client.setCustomVariable(name, value));
     });
@@ -1827,7 +1841,8 @@ export class SystemChain {
    *   .apply();
    * ```
    */
-  rescanSurfaces(): this {
+  rescanSurfaces(enabled: boolean = true): this {
+    if (!enabled) return this; // Skip if disabled
     this.operations.push(() => this.client.rescanSurfaces());
     return this;
   }

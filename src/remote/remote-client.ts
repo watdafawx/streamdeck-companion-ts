@@ -44,30 +44,14 @@
  * ```
  */
 
-import type { ButtonPosition, ButtonStyle, CustomVariable } from './types';
-import { StreamDeckError } from './types';
-
-// Type declarations for Node.js modules (when available)
-declare global {
-  interface Buffer {
-    toString(): string;
-    length: number;
-  }
-  
-  const Buffer: {
-    from(data: string): Buffer;
-  };
-  
-  const process: {
-    versions?: {
-      node?: string;
-    };
-  };
-}
+import type { ButtonPosition, ButtonStyle, CustomVariable } from '../core/types.js';
+import { StreamDeckError } from '../core/types.js';
 
 // Node.js imports - these will only work in Node.js environment
 let net: any;
 let dgram: any;
+let NodeBuffer: any;
+let NodeProcess: any;
 
 // Dynamically import Node.js modules to avoid issues in browser environments
 async function ensureNodeModules() {
@@ -82,6 +66,8 @@ async function ensureNodeModules() {
     try {
       net = await import('net');
       dgram = await import('dgram');
+      NodeBuffer = (await import('buffer')).Buffer;
+      NodeProcess = (await import('process')).default;
     } catch (error) {
       throw new StreamDeckError(
         'Failed to import Node.js modules for TCP/UDP support',
@@ -313,7 +299,7 @@ export class RemoteClient {
             }
           });
         } else {
-          const message = Buffer.from(command);
+          const message = NodeBuffer.from(command);
           this.socket.send(message, 0, message.length, this.config.port, this.config.host, (error: Error) => {
             if (error) {
               reject(new StreamDeckError(
@@ -654,7 +640,7 @@ export class RemoteClient {
  */
 export function isRemoteAvailable(): boolean {
   try {
-    return typeof window === 'undefined' && typeof process !== 'undefined' && Boolean(process.versions?.node);
+    return typeof window === 'undefined' && typeof NodeProcess !== 'undefined' && Boolean(NodeProcess.versions?.node);
   } catch {
     return false;
   }

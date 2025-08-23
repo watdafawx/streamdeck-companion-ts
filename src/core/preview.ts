@@ -1,4 +1,4 @@
-import { StreamDeckClient } from './client';
+import { StreamDeckClient } from './streamdeck-client.js';
 import type { ButtonPosition, ButtonStyle } from './types';
 
 /** 

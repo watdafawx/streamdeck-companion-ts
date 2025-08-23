@@ -9,8 +9,8 @@
  * - Starts/stops its internal timer automatically when animations exist.
  * - Coalesces style updates per tick to reduce API calls.
  */
-import { StreamDeckClient } from './client';
-import type { ButtonPosition, ButtonStyle } from './types';
+import { StreamDeckClient } from '../core/streamdeck-client.js';
+import type { ButtonPosition, ButtonStyle } from '../core/types.js';
 
 // Small helper types
 type AnimationType = 'flash' | 'fade' | 'rainbow';
@@ -230,7 +230,7 @@ export class Animator {
       // This reduces churn compared to many independent callers.
       // Note: executeBatch will still call per-operation endpoints, but
       // we coalesce and rate-limit here to keep things reasonable.
-      this.client.executeBatch(ops as any).catch(err => {
+      this.client.executeBatch(ops as any).catch((err: any) => {
         // Don't let animation fail on network hiccups
         console.error('Animator batch error:', err);
       });

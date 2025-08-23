@@ -4,7 +4,7 @@
  * Pre-configured button layouts and functions for common use cases
  */
 
-import { StreamDeckClient } from './client';
+import { StreamDeckClient } from './streamdeck-client.js';
 import { ButtonPosition, ButtonStyle } from './types';
 import { COLORS, BUTTON_PRESETS, createButtonStyle, formatNumber } from './utils';
 

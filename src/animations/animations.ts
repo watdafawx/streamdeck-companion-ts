@@ -14,8 +14,8 @@
  * ```
  */
 import { Animator } from './animator';
-import type { ButtonPosition, ButtonStyle } from './types';
-import { StreamDeckClient } from './client';
+import type { ButtonPosition, ButtonStyle } from '../core/types.js';
+import { StreamDeckClient } from '../core/streamdeck-client.js';
 
 /**
  * Convenience animation presets that wrap Animator.
